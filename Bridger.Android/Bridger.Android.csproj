@@ -14,6 +14,8 @@
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
     <!-- Core, yansımalı System.Text.Json kullanıyor; trim kapatık (en azından şimdilik). -->
     <PublishTrimmed>false</PublishTrimmed>
+    <!-- Trim kapalıyken AOT desteklenmiyor (XA1030); JIT yeterli. -->
+    <RunAOTCompilation>false</RunAOTCompilation>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +30,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Bridger.Core\Bridger.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Spike: paper.jar yalnızca AndroidAsset olarak paketlenir; varsayılan
+         *.jar glob'u onu Java binding kütüphanesi sanıp derlemeyi kırıyor.
+         (Asıl uygulamada paper indirilir; bu gömme yalnızca spike içindir.) -->
+    <AndroidLibrary Remove="Assets/spike/paper.jar" />
   </ItemGroup>
 
 </Project>

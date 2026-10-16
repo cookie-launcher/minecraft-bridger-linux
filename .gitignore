@@ -17,3 +17,6 @@ yayin-ui/
 
 # Gömülü JRE (PojavLauncher APK'sından üretilir: tools/jre-hazirla.sh)
 Bridger.Android/Assets/components/
+
+# Spike sunucu dosyaları (yalnızca yerel test; /tmp/opencode/spike'tan kopyalanır)
+Bridger.Android/Assets/spike/
