@@ -1,13 +1,13 @@
-using Android.App;
 using Android.Provider;
-using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Bridger.Core;
 
 namespace Bridger.Android;
 
-public class App : Application
+// Not: "Application" adı Avalonia ve Android'de çakıştığı için tam nitelik
+// kullanılır (global::Avalonia.Application).
+public class App : global::Avalonia.Application
 {
     private static bool _platformKuruldu;
 
@@ -43,5 +43,11 @@ public class App : Application
 
         // Gömülü JVM sağlayıcısı (JRE ilk açılışta çıkarılır).
         Platform.SunucuBaslatici = new GomuluJvmBaslatici(Path.Combine(files, "jre21"));
+
+        // JRE çıkarımı arka planda (assets varsa; hata olsa da uygulama açılır).
+        _ = Task.Run(async () =>
+        {
+            try { await JreKurucu.GerekirseCikarAsync(); } catch { }
+        });
     }
 }

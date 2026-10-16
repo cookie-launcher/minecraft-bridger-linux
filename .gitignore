@@ -14,3 +14,6 @@ yayin-ui/
 
 # Yerel test kalıntıları
 *.log
+
+# Gömülü JRE (PojavLauncher APK'sından üretilir: tools/jre-hazirla.sh)
+Bridger.Android/Assets/components/
