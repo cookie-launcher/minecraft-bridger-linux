@@ -48,6 +48,10 @@ public static class OdaService
                     MaskeliIp = Deger(e, "maskeliIp", "MaskeliIp", ""),
                     HerkeseAcik = Bool(e, "herkeseAcik", "HerkeseAcik", true),
                     YerelPort = Sayi(e, "yerelPort", "YerelPort", 25565),
+                    PortKategorisi = Sayi(e, "kategoriNo", "KategoriNo", 2),
+                    DnsAdi = Deger(e, "dnsAdi", "DnsAdi", ""),
+                    OdaDurumu = Deger(e, "durum", "Durum", "acik"),
+                    Sahip = Deger(e, "sahip", "Sahip", ""),
                 });
             }
         }
@@ -102,6 +106,9 @@ public static class OdaService
                 ["kategoriNo"] = oda.PortKategorisi,
                 ["hesapToken"] = hesapToken ?? "",
                 ["hwid"] = LinuxStorage.DonanimKimligi(),
+                ["exeHash"] = ApiClient.ProgramHash,
+                ["yerelDogrulandi"] = oda.YerelDogrulandi,
+                ["dnsAd"] = oda.DnsAdi,
             };
             await WsTransport.MetinGonderAsync(stream, JsonSerializer.Serialize(paket), cts.Token);
             string? yanit = await MetinOkuPingCevapliAsync(stream, 8000, cts.Token);
@@ -111,6 +118,7 @@ public static class OdaService
             if (kok.TryGetProperty("type", out var tip) && string.Equals(tip.GetString(), "ROOM_ERROR", StringComparison.OrdinalIgnoreCase))
                 return null;
             if (kok.TryGetProperty("id", out var id)) oda.Id = id.GetString() ?? oda.Id;
+            if (kok.TryGetProperty("dnsAdi", out var dn) && dn.ValueKind == JsonValueKind.String) oda.DnsAdi = dn.GetString() ?? oda.DnsAdi;
             if (kok.TryGetProperty("maskeliIp", out var m)) return m.GetString();
             return null;
         }

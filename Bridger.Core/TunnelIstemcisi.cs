@@ -59,6 +59,9 @@ public sealed class TunnelIstemcisi : IDisposable
                 ["kategoriNo"] = oda.PortKategorisi,
                 ["hesapToken"] = hesapToken ?? "",
                 ["hwid"] = LinuxStorage.DonanimKimligi(),
+                ["exeHash"] = ApiClient.ProgramHash,
+                ["yerelDogrulandi"] = oda.YerelDogrulandi,
+                ["dnsAd"] = oda.DnsAdi,
             };
             await GuvenliGonderAsync(0x1, Encoding.UTF8.GetBytes(JsonSerializer.Serialize(paket)), _cts.Token);
             string? yanit = await MetinOkuPingCevapliAsync(8000, _cts.Token);
@@ -68,6 +71,7 @@ public sealed class TunnelIstemcisi : IDisposable
             if (kok.TryGetProperty("type", out var tip) && string.Equals(tip.GetString(), "ROOM_ERROR", StringComparison.OrdinalIgnoreCase))
             { Kapat(); return null; }
             if (kok.TryGetProperty("id", out var id) && id.GetString() is string s) oda.Id = s;
+            if (kok.TryGetProperty("dnsAdi", out var dn) && dn.ValueKind == JsonValueKind.String) oda.DnsAdi = dn.GetString() ?? oda.DnsAdi;
             if (kok.TryGetProperty("maskeliIp", out var m) && m.GetString() is string maskeli)
             {
                 _ = Task.Run(DinlemeDongusu);

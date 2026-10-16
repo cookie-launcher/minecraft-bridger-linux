@@ -1,9 +1,13 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:core="clr-namespace:Bridger.Core;assembly=Bridger.Core"
+        xmlns:yerel="clr-namespace:Bridger.Avalonia"
         x:Class="Bridger.Avalonia.MainWindow"
         Title="Minecraft Bridger" Width="1200" Height="640"
         Background="#121212" Foreground="#E0E0E0">
+  <Window.Resources>
+    <yerel:HexFircaCevirici x:Key="HexFirca"/>
+  </Window.Resources>
   <Window.Styles>
     <Style Selector="Button.kategori">
       <Setter Property="Background" Value="#1E1E1E"/>
@@ -11,6 +15,7 @@
       <Setter Property="Margin" Value="0,3"/>
       <Setter Property="Padding" Value="14,8"/>
       <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
       <Setter Property="Cursor" Value="Hand"/>
     </Style>
     <Style Selector="Button.kategori.secil">
@@ -41,7 +46,7 @@
       <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
         <StackPanel Orientation="Vertical" VerticalAlignment="Center">
           <TextBlock Text="MINECRAFT BRIDGER" FontSize="20" FontWeight="Bold"/>
-          <TextBlock Text="Genel Lobisi" Foreground="#757575"/>
+          <TextBlock Text="Tünel Lobisi" Foreground="#757575"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
           <Ellipse x:Name="ElpSunucuDurum" Width="12" Height="12" Fill="#FFAB00"/>
@@ -49,17 +54,12 @@
             <TextBlock x:Name="TxtSunucuDurum" Text="Sunucu: mc.jstudio.com.tr" FontSize="12"/>
             <TextBlock x:Name="TxtTunelDurum" Text="Yerel Port (25565): Beklemede" FontSize="12" Foreground="#757575"/>
           </StackPanel>
-          <Button x:Name="BtnYenile" Classes="ikincil" Content="Yenile" Click="BtnYenile_Click" ToolTip.Tip="Oda Listesini Sunucudan Yenile"/>
-          <Button x:Name="BtnOdaYarat" Classes="aksiyon" Content="ODA YARAT" Click="BtnOdaYarat_Click"/>
-          <Button x:Name="BtnSunucuKur" Classes="ikincil" Content="SUNUCU KUR" Click="BtnSunucuKur_Click"/>
-          <Button x:Name="BtnServerim" Classes="ikincil" Content="Serverim" Click="BtnServerim_Click"/>
           <Button x:Name="BtnHesap" Classes="ikincil" Click="BtnHesap_Click" ToolTip.Tip="Hesap penceresini aç">
             <StackPanel Orientation="Horizontal" Spacing="7">
               <Ellipse x:Name="ElpHesapDurum" Width="10" Height="10" Fill="#FFAB00"/>
               <TextBlock x:Name="TxtHesapRozet" Text="Giriş yapılmadı" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
-          <Button x:Name="BtnAyarlar" Classes="ikincil" Content="Ayarlar" Click="BtnAyarlar_Click"/>
         </StackPanel>
       </DockPanel>
 
@@ -67,101 +67,169 @@
       <Border x:Name="BrdHostBilgiBandi" DockPanel.Dock="Bottom" Background="#1B3A24"
               CornerRadius="6" Padding="10,6" Margin="0,8,0,0" IsVisible="False">
         <DockPanel>
-          <Button Content="Yayından Düş" Classes="ikincil" DockPanel.Dock="Right" Click="BtnOdayiKapat_Click"/>
-          <TextBlock x:Name="TxtHostBilgiMetni" Foreground="#69F0AE" VerticalAlignment="Center"/>
+          <Button Content="Odayı Kapat" Classes="ikincil" DockPanel.Dock="Right" Click="BtnOdayiKapat_Click"/>
+          <TextBlock x:Name="TxtHostBilgiMetni" Foreground="#69F0AE" VerticalAlignment="Center" TextWrapping="Wrap"/>
         </DockPanel>
       </Border>
 
-      <Grid ColumnDefinitions="200,*">
-        <!-- SOL: KATEGORİLER -->
+      <Grid ColumnDefinitions="215,*">
+        <!-- SOL: GÖRÜNÜM / MENÜ / KATEGORİLER -->
         <StackPanel Grid.Column="0" Margin="0,0,12,0">
-          <TextBlock Text="ODA KATEGORİLERİ" FontWeight="Bold" Foreground="#757575" Margin="0,0,0,6"/>
+          <TextBlock Text="GÖRÜNÜM" FontWeight="Bold" Foreground="#757575" Margin="0,0,0,6"/>
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
+            <Button x:Name="BtnSekmeSunucular" Grid.Column="0" Classes="kategori" Content="Sunucular"
+                    Padding="8,8" ToolTip.Tip="Adanmış sunucu odaları (2xxxx ve üzeri)"
+                    Click="BtnSekmeSunucular_Click"/>
+            <Button x:Name="BtnSekmeYerel" Grid.Column="1" Classes="kategori secil" Content="Yerel Dünyalar"
+                    Padding="8,8" ToolTip.Tip="Yerel dünya paylaşımları (1xxxx)"
+                    Click="BtnSekmeYerel_Click"/>
+          </Grid>
+
+          <Button x:Name="BtnOdaSunucuKur" Classes="aksiyon" Content="Sunucu Kur" Margin="0,8,0,0"
+                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                  ToolTip.Tip="Sunucu odası yayınla (2xxxx aralığı)"
+                  Click="BtnOdaSunucuKur_Click" IsVisible="False"/>
+          <Button x:Name="BtnSunucumuYonet" Classes="ikincil" Content="Sunucumu Yönet" Margin="0,4,0,0"
+                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                  ToolTip.Tip="Kendi sunucunu yönet"
+                  Click="BtnSunucumuYonet_Click" IsVisible="False"/>
+          <Button x:Name="BtnOdaKur" Classes="aksiyon" Content="Oda Kur" Margin="0,8,0,0"
+                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                  ToolTip.Tip="Yerel dünyanı paylaş (1xxxx aralığı)"
+                  Click="BtnOdaKur_Click"/>
+          <Button x:Name="BtnYerelOdamYonet" Classes="ikincil" Content="Yerel Odamı Yönet" Margin="0,4,0,0"
+                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                  ToolTip.Tip="Paylaştığın dünyayı yönet"
+                  Click="BtnYerelOdamYonet_Click"/>
+
+          <TextBlock Text="MENÜ" FontWeight="Bold" Foreground="#757575" Margin="0,10,0,6"/>
+          <Button x:Name="BtnSunucuKur" Classes="kategori" Content="Paper Kur"
+                  ToolTip.Tip="Masaüstüne hazır Paper sunucusu kur" Click="BtnSunucuKur_Click"/>
+          <Button x:Name="BtnYenile" Classes="kategori" Content="Yenile"
+                  ToolTip.Tip="Oda Listesini Sunucudan Yenile" Click="BtnYenile_Click"/>
+          <Button x:Name="BtnAyarlar" Classes="kategori" Content="Ayarlar" Click="BtnAyarlar_Click"/>
+          <Button x:Name="BtnServerim" Classes="kategori" Content="Serverim" IsVisible="False" Click="BtnServerim_Click"/>
+
+          <TextBlock Text="ODA KATEGORİLERİ" FontWeight="Bold" Foreground="#757575" Margin="0,10,0,6"/>
           <Button x:Name="BtnKategoriTum" Classes="kategori secil" Content="Tüm Odalar" Click="Kategori_Click"/>
           <Button x:Name="BtnKategoriSurvival" Classes="kategori" Content="Survival" Click="Kategori_Click"/>
           <Button x:Name="BtnKategoriMiniOyunlar" Classes="kategori" Content="Mini Oyunlar" Click="Kategori_Click"/>
-          <Separator Margin="0,8"/>
-          <TextBlock x:Name="TxtAktifKategoriBaslik" Text="Tüm Odalar" FontSize="15" FontWeight="SemiBold"/>
-          <Border Background="#2C2C2C" CornerRadius="10" Padding="10,2" Margin="0,4,0,0"
-                  HorizontalAlignment="Left">
-            <TextBlock x:Name="TxtOdaSayisiBadge" Text="0 Aktif Oda"/>
-          </Border>
         </StackPanel>
 
-        <!-- ORTA: ODA LİSTESİ -->
-        <Grid Grid.Column="1">
-          <ScrollViewer>
-            <ItemsControl x:Name="IcOdalar">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="core:OdaModel">
-                  <Border Background="#1E1E1E" CornerRadius="8" Padding="14,10" Margin="0,0,0,8">
-                    <Grid ColumnDefinitions="*,Auto">
-                      <StackPanel Grid.Column="0" Spacing="3">
-                        <TextBlock Text="{Binding OdaAdi}" FontWeight="Bold" FontSize="15"/>
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                          <TextBlock Text="{Binding Kurucu}" Foreground="#BDBDBD"/>
-                          <TextBlock Text="{Binding Kategori}" Foreground="#69F0AE"/>
-                          <TextBlock Text="{Binding Surum}" Foreground="#757575"/>
+        <!-- ORTA: BAŞLIK + ODA LİSTESİ -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*">
+          <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,8">
+            <TextBlock x:Name="TxtAktifKategoriBaslik" Text="Yerel Dünyalar" FontSize="16"
+                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Border Background="#2C2C2C" CornerRadius="10" Padding="10,2" VerticalAlignment="Center">
+              <TextBlock x:Name="TxtOdaSayisiBadge" Text="0 Aktif Oda"/>
+            </Border>
+          </StackPanel>
+          <Grid Grid.Row="1">
+            <ScrollViewer>
+              <ItemsControl x:Name="IcOdalar">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="core:OdaModel">
+                    <Border Background="#1E1E1E" CornerRadius="8" Padding="14,10" Margin="0,0,0,8">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="3">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding OdaAdi}" FontWeight="Bold" FontSize="15"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <Border IsVisible="{Binding RozetGorunumu}" CornerRadius="8" Padding="8,1"
+                                    VerticalAlignment="Center"
+                                    Background="{Binding DurumArkaRengiHex, Converter={StaticResource HexFirca}}">
+                              <TextBlock Text="{Binding DurumRozeti}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                            </Border>
+                          </StackPanel>
+                          <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="👑 Kurucu:" Foreground="#757575"/>
+                            <TextBlock Text="{Binding Kurucu}" Foreground="#BDBDBD"/>
+                            <TextBlock Text="{Binding Kategori}" Foreground="#69F0AE"/>
+                            <TextBlock Text="{Binding Surum}" Foreground="#757575"/>
+                          </StackPanel>
+                          <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="👥 Oyuncular:" Foreground="#757575"/>
+                            <TextBlock Text="{Binding OyuncuSayisiMetni}"/>
+                            <TextBlock Text="Tünel IP Adresi:" Foreground="#757575"/>
+                            <TextBlock Text="{Binding MaskeliIp}" FontFamily="monospace" Foreground="#BDBDBD"/>
+                          </StackPanel>
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                          <TextBlock Text="{Binding OyuncuSayisiMetni}"/>
-                          <TextBlock Text="{Binding MaskeliIp}" FontFamily="monospace" Foreground="#BDBDBD"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                          <Button Content="HERKESE AÇIK YAP" Classes="aksiyon" Tag="{Binding}"
+                                  Click="BtnYayinla_Click" IsVisible="{Binding YayinlaGorunumu}"
+                                  ToolTip.Tip="Odayı sunucuda herkese açık yayınla"/>
+                          <Button Content="KATIL" Classes="aksiyon" Tag="{Binding}"
+                                  Click="BtnKatil_Click" IsVisible="{Binding KatilGorunumu}"/>
                         </StackPanel>
-                      </StackPanel>
-                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                        <Button Content="Katıl" Classes="aksiyon" Tag="{Binding}"
-                                Click="BtnKatil_Click"/>
-                      </StackPanel>
-                    </Grid>
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-          <Border x:Name="BrdBosListe" Background="#1E1E1E" CornerRadius="8" Padding="20"
-                  VerticalAlignment="Center" HorizontalAlignment="Center" IsVisible="False">
-            <TextBlock Text="Bu kategoride henüz aktif oda bulunmuyor.&#x0a;Alttaki 'ODA YARAT' butonuna tıklayarak ilk odayı sen aç!"
-                       TextAlignment="Center"/>
-          </Border>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <Border x:Name="BrdBosListe" Background="#1E1E1E" CornerRadius="8" Padding="20"
+                    VerticalAlignment="Center" HorizontalAlignment="Center" IsVisible="False">
+              <StackPanel Spacing="4">
+                <TextBlock Text="Bu kategoride henüz aktif oda bulunmuyor." TextAlignment="Center"/>
+                <TextBlock x:Name="TxtBosListeIpucu" Foreground="#757575" TextAlignment="Center"
+                           TextWrapping="Wrap" MaxWidth="420"
+                           Text="Soldaki 'Oda Kur' butonuna tıklayarak dünyanı paylaşabilirsin!"/>
+              </StackPanel>
+            </Border>
+          </Grid>
         </Grid>
       </Grid>
     </DockPanel>
 
     <!-- ODA YARAT MODAL -->
     <Border x:Name="GrdOdaYaratModal" Background="#AA000000" IsVisible="False">
-      <Border Background="#1E1E1E" CornerRadius="10" Padding="20" Width="420"
+      <Border Background="#1E1E1E" CornerRadius="10" Padding="20" Width="460"
               VerticalAlignment="Center" HorizontalAlignment="Center">
-        <StackPanel Spacing="8">
-          <TextBlock Text="Yeni Minecraft Odası" FontSize="16" FontWeight="Bold"/>
-          <TextBox x:Name="TxtYeniOdaAdi" PlaceholderText="Oda adı"/>
+        <StackPanel Spacing="7">
+          <TextBlock Text="🚀 Yeni Minecraft Odası Yarat" FontSize="16" FontWeight="Bold"/>
+          <TextBlock Text="Odan önce özel taslak olarak bu listede görünür. Başkalarının görmesi için karttaki HERKESE AÇIK YAP'a basman gerekir."
+                     Foreground="#757575" TextWrapping="Wrap"/>
+          <TextBlock Text="Oda Adı:" FontWeight="SemiBold" Foreground="#E0E0E0" FontSize="12"/>
+          <TextBox x:Name="TxtYeniOdaAdi" PlaceholderText="Efsane Survival Dünyası"/>
+          <StackPanel x:Name="BrdDnsAdiSatir" Spacing="4" IsVisible="False">
+            <TextBlock Text="Sunucu Adın (DNS adresin olur):" FontWeight="SemiBold" Foreground="#E0E0E0" FontSize="12"/>
+            <TextBox x:Name="TxtDnsAdi" MaxLength="24" TextChanged="TxtDnsAdi_Degisti"/>
+            <TextBlock x:Name="TxtDnsAdiOrnek" Text=".mc.jstudio.com.tr" Foreground="#757575" FontSize="12"/>
+          </StackPanel>
+          <TextBlock Text="Kategori:" FontWeight="SemiBold" Foreground="#E0E0E0" FontSize="12"/>
           <ComboBox x:Name="CmbYeniOdaKategori" SelectedIndex="0" HorizontalAlignment="Stretch">
             <ComboBoxItem>Survival</ComboBoxItem>
             <ComboBoxItem>Mini Oyunlar</ComboBoxItem>
             <ComboBoxItem>Topluluk</ComboBoxItem>
           </ComboBox>
-          <StackPanel Orientation="Horizontal" Spacing="8">
-            <ComboBox x:Name="CmbYeniOdaSurum" SelectedIndex="0" Width="200">
-              <ComboBoxItem>1.20.1</ComboBoxItem>
-              <ComboBoxItem>1.19.4</ComboBoxItem>
-              <ComboBoxItem>1.16.5</ComboBoxItem>
-            </ComboBox>
-            <ComboBox x:Name="CmbYeniOdaMaksOyuncu" SelectedIndex="2" Width="150">
-              <ComboBoxItem>4</ComboBoxItem>
-              <ComboBoxItem>6</ComboBoxItem>
-              <ComboBoxItem>8</ComboBoxItem>
-              <ComboBoxItem>12</ComboBoxItem>
-              <ComboBoxItem>20</ComboBoxItem>
-            </ComboBox>
-          </StackPanel>
-          <TextBlock Text="Yerel Minecraft Portu:"/>
+          <TextBlock Text="Minecraft Sürümü:" FontWeight="SemiBold" Foreground="#E0E0E0" FontSize="12"/>
+          <ComboBox x:Name="CmbYeniOdaSurum" SelectedIndex="0" HorizontalAlignment="Stretch"/>
+          <TextBlock Text="Maksimum Oyuncu:" FontWeight="SemiBold" Foreground="#E0E0E0" FontSize="12"/>
+          <ComboBox x:Name="CmbYeniOdaMaksOyuncu" HorizontalAlignment="Stretch"/>
+          <TextBlock Text="Sunucu:" FontWeight="SemiBold" Foreground="#E0E0E0" FontSize="12"/>
+          <ComboBox x:Name="CmbOdaSunucu" HorizontalAlignment="Stretch" SelectionChanged="CmbOdaSunucu_Degisti"/>
+          <TextBlock Text="Yerel Minecraft Portu:" FontWeight="SemiBold" Foreground="#E0E0E0" FontSize="12"/>
           <StackPanel Orientation="Horizontal" Spacing="8">
             <TextBox x:Name="TxtYerelPort" Text="25565" Width="120"/>
             <Button Content="Sına" Classes="ikincil" Click="BtnModalSina_Click"/>
           </StackPanel>
-          <TextBlock x:Name="TxtPortSinaSonuc" Foreground="#757575" TextWrapping="Wrap"/>
-          <CheckBox x:Name="ChkLanGoster" Content="LAN'da da ilan et" IsChecked="True"/>
+          <TextBlock x:Name="TxtPortSinaSonuc" Foreground="#757575" TextWrapping="Wrap" FontSize="12"/>
+          <CheckBox x:Name="ChkLanGoster" Content="Yerel ağda göster (aynı WiFi)" IsChecked="True"/>
+          <TextBlock Text="Port Aralığı (oda tipine göre adres değişir):" Foreground="#9E9E9E" FontSize="11" Margin="0,6,0,0"/>
+          <ComboBox x:Name="CmbPortKategorisi" HorizontalAlignment="Stretch" FontSize="13">
+            <ComboBoxItem Tag="1">Harita  1xxxx — kendi dünyanı paylaş</ComboBoxItem>
+            <ComboBoxItem Tag="2">Sunucu  2xxxx — kendi sunucunu paylaş</ComboBoxItem>
+            <ComboBoxItem Tag="3">Mini Oyun  3xxxx</ComboBoxItem>
+            <ComboBoxItem Tag="4">Topluluk  4xxxx</ComboBoxItem>
+            <ComboBoxItem Tag="5">Resmi  5xxxx</ComboBoxItem>
+            <ComboBoxItem Tag="6">Özel  6xxxx</ComboBoxItem>
+          </ComboBox>
+          <TextBlock Foreground="#E0E0E0" FontSize="12" Margin="0,0,0,4" TextWrapping="Wrap"
+                     Text="Odanın port aralığı:&#x0a;1xxxx = Yerel Harita (kendi dünyanı paylaş)&#x0a;2xxxx = Sunucu (kendi sunucunu paylaş)&#x0a;3xxxx = Mini Oyun&#x0a;4xxxx = Topluluk&#x0a;5xxxx = Resmi Sunucu&#x0a;6xxxx = Özel Etkinlik"/>
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
             <Button Content="İptal" Classes="ikincil" Click="ModalKapat_Click"/>
-            <Button Content="Yayınla" Classes="aksiyon" Click="BtnYayinlaOnay_Click"/>
+            <Button Content="Özel Oda Oluştur" Classes="aksiyon" Click="BtnModalOnayla_Click"/>
           </StackPanel>
         </StackPanel>
       </Border>
@@ -274,6 +342,21 @@
           <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
             <Button Content="Kapat" Classes="ikincil" Click="ModalKapat_Click"/>
             <Button Content="Kaydet" Classes="aksiyon" Click="BtnAyarKaydet_Click"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+
+    <!-- MESAJ KUTUSU -->
+    <Border x:Name="GrdMesaj" Background="#AA000000" IsVisible="False">
+      <Border Background="#1E1E1E" CornerRadius="10" Padding="20" Width="420"
+              VerticalAlignment="Center" HorizontalAlignment="Center">
+        <StackPanel Spacing="10">
+          <TextBlock x:Name="TxtMesajBaslik" FontSize="16" FontWeight="Bold" TextWrapping="Wrap"/>
+          <TextBlock x:Name="TxtMesajMetni" TextWrapping="Wrap"/>
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button x:Name="BtnMesajIptal" Content="İptal" Classes="ikincil" Click="BtnMesajIptal_Click" IsVisible="False"/>
+            <Button x:Name="BtnMesajTamam" Content="Tamam" Classes="aksiyon" Click="BtnMesajTamam_Click"/>
           </StackPanel>
         </StackPanel>
       </Border>

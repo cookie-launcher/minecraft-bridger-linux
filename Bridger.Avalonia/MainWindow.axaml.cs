@@ -5,24 +5,41 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Bridger.Core;
 
 namespace Bridger.Avalonia;
 
+// Linux portu — en yeni resmi istemci (mc.jstudio.com.tr/indir) akışıyla eşitlendi:
+// 2 sekme (Sunucular / Yerel Dünyalar) + 6 port kategorisi (1xxxx..6xxxx) +
+// özel taslak → HERKESE AÇIK YAP akışı + sahip eşlemesi + otomatik taslak.
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<OdaModel> _tumOdalar = new();
     private readonly ObservableCollection<OdaModel> _filtreliOdalar = new();
+    private string _sekme = "yerel";
     private string _seciliKategori = "Tüm Odalar";
     private readonly HesapOturumu _oturum = new();
     private TunnelIstemcisi? _aktifTunnel;
     private LanIlani? _lanIlani;
     private SunucuKaydi? _seciliSunucu;
+
+    // Oda akışı durumu (orijinal MainWindow alanları):
+    private OdaModel? _aktifKurulanOda;
+    private readonly List<int> _odaSunucuPortlari = new();
+    private string _sunucuAltyapiModu = "port";
+    private bool _otomatikTaslakOlusturuldu;
+    private bool _yerelMcBulundu;
+    private bool _tespitDevamEdiyor;
+    private DispatcherTimer? _tespitZamanlayici;
+    private DispatcherTimer? _odaListesiYenilemeZamanlayici;
+    private TaskCompletionSource<bool>? _mesajTcs;
 
     public MainWindow()
     {
@@ -30,6 +47,7 @@ public partial class MainWindow : Window
         IcOdalar.ItemsSource = _filtreliOdalar;
         Closing += (_, _) =>
         {
+            try { _tespitZamanlayici?.Stop(); _odaListesiYenilemeZamanlayici?.Stop(); } catch { }
             try { _aktifTunnel?.Dispose(); _aktifTunnel = null; } catch { }
             try { _lanIlani?.Dispose(); _lanIlani = null; } catch { }
         };
@@ -38,6 +56,7 @@ public partial class MainWindow : Window
 
     private async Task BaslangicAsync()
     {
+        SekmeSec("yerel");
         if (await HesapService.OtomatikGirisDeneAsync(_oturum))
         {
             TxtHesapBilgi.Text = _oturum.BilgiMetni();
@@ -46,6 +65,8 @@ public partial class MainWindow : Window
             SunuculariOtomatikBaslat();
         }
         HesapRozetGuncelle();
+        ServerimButonunuGuncelle();
+        YerelMcTespitiniBaslat();
         await OdalariSunucudanYukleAsync();
     }
 
@@ -86,6 +107,38 @@ public partial class MainWindow : Window
         catch { }
     }
 
+    // Orijinal ServerimGorunumunuGuncelle'nin bir parçası: sunucu varsa "Serverim" görünür.
+    private void ServerimButonunuGuncelle()
+    {
+        try
+        {
+            int yerel = 0;
+            try { yerel = SunucuYonetimi.YerelSunuculariTara().Count; } catch { }
+            BtnServerim.IsVisible = _oturum.SunucuSayisi > 0 || yerel > 0;
+        }
+        catch { }
+    }
+
+    // ---- SEKMELER (GÖRÜNÜM) ----
+    // Orijinal SekmeSec birebir: sekme durumu + butonların görünürlüğü + başlık.
+    private void SekmeSec(string sekme)
+    {
+        _sekme = sekme == "sunucu" ? "sunucu" : "yerel";
+        bool sunucu = _sekme == "sunucu";
+        BtnSekmeSunucular.Classes.Set("secil", sunucu);
+        BtnSekmeYerel.Classes.Set("secil", !sunucu);
+        BtnOdaSunucuKur.IsVisible = sunucu;
+        BtnSunucumuYonet.IsVisible = sunucu;
+        BtnOdaKur.IsVisible = !sunucu;
+        BtnYerelOdamYonet.IsVisible = !sunucu;
+        TxtAktifKategoriBaslik.Text = sunucu ? "Sunucular" : "Yerel Dünyalar";
+        KategoriFiltresiniUygula();
+    }
+
+    private void BtnSekmeSunucular_Click(object? s, RoutedEventArgs e) => SekmeSec("sunucu");
+
+    private void BtnSekmeYerel_Click(object? s, RoutedEventArgs e) => SekmeSec("yerel");
+
     // ---- ODA LİSTESİ ----
     private async Task OdalariSunucudanYukleAsync()
     {
@@ -95,7 +148,17 @@ public partial class MainWindow : Window
             TxtSunucuDurum.Text = "Sunucudan odalar alınıyor...";
             var gelen = await OdaService.OdalariGetirAsync();
             _tumOdalar.Clear();
-            foreach (var o in gelen) _tumOdalar.Add(o);
+            foreach (var o in gelen)
+            {
+                // Orijinal: sunucudan gelen "sahip" hesabınla eşleşirse oda senin sayılır.
+                if (!string.IsNullOrEmpty(_oturum.Kullanici) && !string.IsNullOrEmpty(o.Sahip) &&
+                    string.Equals(o.Sahip, _oturum.Kullanici, StringComparison.OrdinalIgnoreCase))
+                    o.BenimOdam = true;
+                _tumOdalar.Add(o);
+            }
+            // Yerel taslak listede kalmalı (sunucu listesinde yoksa geri ekle).
+            if (_aktifKurulanOda != null && !_tumOdalar.Any(o => o.Id == _aktifKurulanOda.Id))
+                _tumOdalar.Insert(0, _aktifKurulanOda);
             ElpSunucuDurum.Fill = new SolidColorBrush(Color.FromRgb(0, 230, 118));
             TxtSunucuDurum.Text = "Bağlı: mc.jstudio.com.tr:80";
         }
@@ -111,16 +174,22 @@ public partial class MainWindow : Window
         }
     }
 
+    // Orijinal KategoriFiltresiniUygula: sekme (1xxxx / 2xxxx+) + kategori filtresi.
     private void KategoriFiltresiniUygula()
     {
         _filtreliOdalar.Clear();
-        foreach (var o in _tumOdalar)
-            if (_seciliKategori == "Tüm Odalar" ||
-                string.Equals(o.Kategori, _seciliKategori, StringComparison.OrdinalIgnoreCase))
-                _filtreliOdalar.Add(o);
+        IEnumerable<OdaModel> kaynak = _tumOdalar;
+        kaynak = _sekme == "yerel"
+            ? kaynak.Where(o => o.PortKategorisi == 1)
+            : kaynak.Where(o => o.PortKategorisi != 1);
+        if (_seciliKategori != "Tüm Odalar")
+            kaynak = kaynak.Where(o => string.Equals(o.Kategori, _seciliKategori, StringComparison.OrdinalIgnoreCase));
+        foreach (var o in kaynak) _filtreliOdalar.Add(o);
         TxtOdaSayisiBadge.Text = $"{_filtreliOdalar.Count} Aktif Oda";
-        TxtAktifKategoriBaslik.Text = _seciliKategori;
         BrdBosListe.IsVisible = _filtreliOdalar.Count == 0;
+        TxtBosListeIpucu.Text = _sekme == "yerel"
+            ? "Soldaki 'Oda Kur' butonuna tıklayarak dünyanı paylaşabilirsin!"
+            : "Soldaki 'Sunucu Kur' butonuna tıklayarak sunucunu yayınlayabilirsin!";
     }
 
     private void Kategori_Click(object? s, RoutedEventArgs e)
@@ -138,6 +207,11 @@ public partial class MainWindow : Window
     private async void BtnKatil_Click(object? s, RoutedEventArgs e)
     {
         if ((s as Button)?.Tag is not OdaModel oda || string.IsNullOrWhiteSpace(oda.MaskeliIp)) return;
+        if (!oda.HerkeseAcik)
+        {
+            TxtTunelDurum.Text = "Bu oda yayında değil (özel taslak).";
+            return;
+        }
         string ip = oda.MaskeliIp;
         try
         {
@@ -146,6 +220,11 @@ public partial class MainWindow : Window
             if (!string.IsNullOrEmpty(taze)) { oda.MaskeliIp = taze; ip = taze; }
         }
         catch { }
+        KopyalaPanoya(ip);
+    }
+
+    private void KopyalaPanoya(string ip)
+    {
         try
         {
             var cb = TopLevel.GetTopLevel(this)?.Clipboard;
@@ -153,7 +232,7 @@ public partial class MainWindow : Window
             {
                 var dt = new global::Avalonia.Input.DataTransfer();
                 dt.Add(global::Avalonia.Input.DataTransferItem.CreateText(ip));
-                await cb.SetDataAsync(dt);
+                _ = cb.SetDataAsync(dt);
             }
             TxtTunelDurum.Text = $"IP kopyalandı ({ip}) — Minecraft'ta Doğrudan Bağlan'a yapıştır.";
         }
@@ -169,6 +248,43 @@ public partial class MainWindow : Window
         GrdKurPluginModal.IsVisible = false;
         GrdServerimModal.IsVisible = false;
         GrdAyarlarModal.IsVisible = false;
+    }
+
+    // ---- MESAJ KUTUSU (orijinal MessageBox karşılığı) ----
+    private void MesajGoster(string metin, string baslik = "")
+    {
+        TxtMesajBaslik.Text = baslik;
+        TxtMesajBaslik.IsVisible = !string.IsNullOrEmpty(baslik);
+        TxtMesajMetni.Text = metin;
+        BtnMesajIptal.IsVisible = false;
+        BtnMesajTamam.Content = "Tamam";
+        GrdMesaj.IsVisible = true;
+    }
+
+    private Task<bool> OnaySorAsync(string metin)
+    {
+        _mesajTcs = new TaskCompletionSource<bool>();
+        TxtMesajBaslik.Text = "Onay";
+        TxtMesajBaslik.IsVisible = true;
+        TxtMesajMetni.Text = metin;
+        BtnMesajIptal.IsVisible = true;
+        BtnMesajTamam.Content = "Devam";
+        GrdMesaj.IsVisible = true;
+        return _mesajTcs.Task;
+    }
+
+    private void BtnMesajTamam_Click(object? s, RoutedEventArgs e)
+    {
+        GrdMesaj.IsVisible = false;
+        _mesajTcs?.TrySetResult(true);
+        _mesajTcs = null;
+    }
+
+    private void BtnMesajIptal_Click(object? s, RoutedEventArgs e)
+    {
+        GrdMesaj.IsVisible = false;
+        _mesajTcs?.TrySetResult(false);
+        _mesajTcs = null;
     }
 
     private readonly List<string> _surumler = new();
@@ -195,11 +311,49 @@ public partial class MainWindow : Window
             _surumler.AddRange(new[] { "1.20.1", "1.19.4", "1.18.2", "1.16.5" });
     }
 
-    private void BtnOdaYarat_Click(object? s, RoutedEventArgs e)
+    // ---- ODA YARAT (özel taslak) ----
+    // Orijinal OdaYaratModalAc: portKategoriNo → CmbPortKategorisi seçimi.
+    private async void OdaYaratModalAc(int portKategoriNo)
     {
+        if (_aktifKurulanOda != null)
+        {
+            MesajGoster("Zaten aktif bir odanız yayında! Yeni oda açmak için önce mevcut odanızı kapatabilirsiniz.", "Oda Zaten Açık");
+            return;
+        }
+        await SunucuModunuYukleAsync();
+        try
+        {
+            foreach (var oge in CmbPortKategorisi.Items.OfType<ComboBoxItem>())
+            {
+                if (oge.Tag != null && oge.Tag.ToString() == portKategoriNo.ToString())
+                {
+                    CmbPortKategorisi.SelectedItem = oge;
+                    break;
+                }
+            }
+        }
+        catch { }
+        MaksOyuncuSecenekleriniUygula();
+        OdaSunucuListesiniYukle();
+        try
+        {
+            bool dnsAd = _sunucuAltyapiModu == "dns-ad";
+            BrdDnsAdiSatir.IsVisible = dnsAd;
+            if (dnsAd)
+            {
+                string oneri = DnsSlugUret(TxtYeniOdaAdi.Text ?? "");
+                if (!string.IsNullOrEmpty(oneri)) TxtDnsAdi.Text = oneri;
+                DnsOrnekYaz();
+            }
+        }
+        catch { }
         GrdOdaYaratModal.IsVisible = true;
         _ = OdaYaratSurumleriniDoldurAsync();
     }
+
+    private void BtnOdaSunucuKur_Click(object? s, RoutedEventArgs e) => OdaYaratModalAc(2);
+
+    private void BtnOdaKur_Click(object? s, RoutedEventArgs e) => OdaYaratModalAc(1);
 
     private async Task OdaYaratSurumleriniDoldurAsync()
     {
@@ -210,6 +364,9 @@ public partial class MainWindow : Window
         int idx = onceki != null ? _surumler.IndexOf(onceki) : 0;
         CmbYeniOdaSurum.SelectedIndex = idx >= 0 ? idx : 0;
     }
+
+    private static string SeciliMetin(ComboBox c) =>
+        (c.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? c.SelectedItem?.ToString() ?? "";
 
     private static string? SurumuAlgila(string? statusJson)
     {
@@ -259,87 +416,434 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void BtnYayinlaOnay_Click(object? s, RoutedEventArgs e)
+    // Orijinal BtnModalOnayla_Click: özel taslak oluştur (yayınlanmaz).
+    private void BtnModalOnayla_Click(object? s, RoutedEventArgs e)
     {
-        if (!int.TryParse(TxtYerelPort.Text?.Trim(), out int port)) port = 25565;
-        var (motd, durumJson) = await McProtocol.YerelDurumSorAsync("127.0.0.1", port, zamanAsimiMs: 3000);
-        if (motd == null)
+        string odaAdi = string.IsNullOrWhiteSpace(TxtYeniOdaAdi.Text) ? "Minecraft Lobi Odası" : TxtYeniOdaAdi.Text!.Trim();
+        string kurucu = _oturum.EkranNicki("SteveTR");
+        string kategori = SeciliMetin(CmbYeniOdaKategori);
+        if (string.IsNullOrEmpty(kategori)) kategori = "Survival";
+        string surum = CmbYeniOdaSurum.SelectedItem?.ToString() ?? "";
+        if (string.IsNullOrEmpty(surum)) surum = "1.20.1";
+        int maks = 8;
+        int.TryParse(SeciliMetin(CmbYeniOdaMaksOyuncu), out maks);
+        if (maks <= 0) maks = 8;
+        int port = 25565;
+        if (!int.TryParse(TxtYerelPort.Text?.Trim(), out port) || port <= 0 || port > 65535) port = 25565;
+
+        GrdOdaYaratModal.IsVisible = false;
+        var oda = new OdaModel
         {
-            TxtPortSinaSonuc.Text = $"Yerel {port} portunda Minecraft bulunamadı. Yine de yayınlansın mı dersen portu düzelt.";
-            return;
-        }
-        // İlan edilen sürüm, tünele bağlı GERÇEK sunucununki olmalı; yoksa
-        // 26.3 istemcisi 1.20.1 sunucuya girip "outdated server" yer.
-        string? gercekSurum = SurumuAlgila(durumJson);
-        string secili = (CmbYeniOdaSurum.SelectedItem as ComboBoxItem)?.Content?.ToString()
-            ?? CmbYeniOdaSurum.SelectedItem?.ToString() ?? "1.20.1";
-        if (!string.IsNullOrEmpty(gercekSurum) &&
-            !string.Equals(secili, gercekSurum, StringComparison.OrdinalIgnoreCase))
-        {
-            SurumuAyarla(gercekSurum);
-            secili = gercekSurum;
-            TxtPortSinaSonuc.Text = $"Sürüm uyumsuzdu, sunucunun gerçek sürümüne ayarlandı: {gercekSurum}.";
-        }
+            Id = "oda-" + Guid.NewGuid().ToString("N")[..6],
+            OdaAdi = odaAdi,
+            Kurucu = kurucu,
+            Kategori = kategori,
+            AktifOyuncu = 1,
+            MaksOyuncu = maks,
+            Surum = surum,
+            YerelPort = port,
+            PortKategorisi = SeciliPortKategorisi(),
+            DnsAdi = _sunucuAltyapiModu == "dns-ad" ? (TxtDnsAdi.Text ?? "").Trim().ToLowerInvariant() : "",
+            MaskeliIp = "Yayınlanmadı (özel taslak)",
+            HerkeseAcik = false,
+            BenimOdam = true,
+            LanGoster = ChkLanGoster.IsChecked == true,
+        };
+        if (_aktifKurulanOda != null) _tumOdalar.Remove(_aktifKurulanOda);
+        _aktifKurulanOda = oda;
+        _tumOdalar.Insert(0, oda);
+        KategoriFiltresiniUygula();
+        BrdHostBilgiBandi.IsVisible = true;
+        TxtHostBilgiMetni.Text = $"Taslak Oda: '{oda.OdaAdi}' (özel) | Yerel hedef port: {port} | Yayınlamak için karttaki HERKESE AÇIK YAP'a bas.";
+        MesajGoster("Oda özel taslak olarak oluşturuldu.\n\nBaşkalarının görebilmesi için oda kartındaki HERKESE AÇIK YAP butonuna bas.", "Özel Taslak Hazır");
+    }
+
+    private int SeciliPortKategorisi()
+    {
         try
         {
-            TxtPortSinaSonuc.Text = "Sunucuya yayınlanıyor...";
-            var oda = new OdaModel
+            if (CmbPortKategorisi.SelectedItem is ComboBoxItem oge &&
+                int.TryParse(oge.Tag as string, out int sonuc) && sonuc >= 1 && sonuc <= 6)
+                return sonuc;
+        }
+        catch { }
+        return 2;
+    }
+
+    // ---- YAYINLA (karttaki HERKESE AÇIK YAP) ----
+    // Orijinal BtnYayinla_Click birebir + port iyileştirmesi (gerçek sürümü algıla).
+    private async void BtnYayinla_Click(object? s, RoutedEventArgs e)
+    {
+        if ((s as Button)?.Tag is not OdaModel taslak) return;
+        if (taslak.HerkeseAcik) return;
+        var btn = s as Button;
+        if (btn != null) btn.IsEnabled = false;
+        try
+        {
+            var (motd, durumJson) = await McProtocol.YerelDurumSorAsync("127.0.0.1", taslak.YerelPort, zamanAsimiMs: 3000);
+            bool yerelOk = motd != null;
+            if (!yerelOk)
             {
-                OdaAdi = string.IsNullOrWhiteSpace(TxtYeniOdaAdi.Text) ? "Minecraft Odam" : TxtYeniOdaAdi.Text!.Trim(),
-                Kurucu = _oturum.EkranNicki(),
-                Kategori = (CmbYeniOdaKategori.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Survival",
-                Surum = secili,
-                AktifOyuncu = 1,
-                MaksOyuncu = int.TryParse((CmbYeniOdaMaksOyuncu.SelectedItem as ComboBoxItem)?.Content?.ToString(), out int m) ? m : 8,
-                YerelPort = port,
-            };
-            string? maskeli = null;
+                bool devam = await OnaySorAsync($"Yerel {taslak.YerelPort} portunda Minecraft bulunamadı.\n\nYine de yayınlansın mı? (Katılımcılar bağlanamaz.)");
+                if (!devam) return;
+            }
+            // İlan edilen sürüm, tünele bağlı GERÇEK sunucununki olmalı; yoksa
+            // istemci "outdated server" yer. (Port iyileştirmesi.)
+            string? gercekSurum = SurumuAlgila(durumJson);
+            if (!string.IsNullOrEmpty(gercekSurum) &&
+                !string.Equals(taslak.Surum, gercekSurum, StringComparison.OrdinalIgnoreCase))
+                taslak.Surum = gercekSurum;
+
+            taslak.YerelDogrulandi = yerelOk ? "probed" : "onay";
+            if (_aktifKurulanOda != null && _aktifKurulanOda != taslak)
+                _tumOdalar.Remove(_aktifKurulanOda);
+            _aktifKurulanOda = taslak;
+
             try { _aktifTunnel?.Dispose(); } catch { }
             var tunnel = new TunnelIstemcisi();
             tunnel.OdaKapatildi += YayindanDusur;
-            maskeli = await tunnel.YayinlaAsync(oda, port,
-                int.TryParse((CmbYeniOdaMaksOyuncu.SelectedItem as ComboBoxItem)?.Content?.ToString(), out int mm) ? mm : 20,
-                _oturum.Token);
-            if (string.IsNullOrEmpty(maskeli))
+            string? atanmis = await tunnel.YayinlaAsync(taslak, taslak.YerelPort,
+                taslak.MaksOyuncu > 0 ? taslak.MaksOyuncu : 20, _oturum.Token);
+            if (string.IsNullOrEmpty(atanmis))
             {
                 try { tunnel.Dispose(); } catch { }
-                TxtPortSinaSonuc.Text = "Sunucuya yayınlanamadı. Bağlantını kontrol edip tekrar dene.";
+                _aktifTunnel = null;
+                MesajGoster("Sunucuya yayınlanamadı. Bağlantını kontrol edip tekrar dene.", "Yayın Başarısız");
                 return;
             }
             _aktifTunnel = tunnel;
-            oda.MaskeliIp = maskeli;
-            GrdOdaYaratModal.IsVisible = false;
-            BrdHostBilgiBandi.IsVisible = true;
-            TxtHostBilgiMetni.Text = $"Odan Yayında: '{oda.OdaAdi}' | Yerel hedef: {port} | Tünel IP: {maskeli}";
-            // Orijinal: yayın sonrası LAN ilanı + katılım bildirimi.
-            if (ChkLanGoster.IsChecked == true)
-            {
-                _lanIlani ??= new LanIlani();
-                _lanIlani.Baslat(oda.OdaAdi, port);
-            }
-            else _lanIlani?.Durdur();
+            taslak.MaskeliIp = atanmis;
+            taslak.HerkeseAcik = true;
+            KategoriFiltresiniUygula();
             _ = HesapService.KatilimBildirAsync(_oturum);
             await OdalariSunucudanYukleAsync();
+            BrdHostBilgiBandi.IsVisible = true;
+            TxtHostBilgiMetni.Text = $"Odan Yayında: '{taslak.OdaAdi}' | Yerel hedef: {taslak.YerelPort} | Tünel IP: {taslak.MaskeliIp}";
+            if (taslak.LanGoster)
+            {
+                _lanIlani ??= new LanIlani();
+                _lanIlani.Baslat(taslak.OdaAdi, taslak.YerelPort);
+            }
+            else
+            {
+                try { _lanIlani?.Durdur(); } catch { }
+            }
+            MesajGoster($"Odan herkese açık yayınlandı!\n\nTünel IP: {taslak.MaskeliIp}\nKatılımcılar lobide odayı görecek.", "Yayında");
         }
-        catch { TxtPortSinaSonuc.Text = "Yayınlanamadı, tekrar dene."; }
+        catch (Exception ex)
+        {
+            MesajGoster("Yayınlanırken hata oluştu:\n\n" + ex.Message, "Yayın Hatası");
+        }
+        finally
+        {
+            if (btn != null) btn.IsEnabled = true;
+        }
     }
 
-    // Orijinal YayindanDusur + OdayiVeBaglantilariKapat karşılığı.
+    // Orijinal YayindanDusur: özel taslağa geri döndür + bandı göster.
     private void YayindanDusur(string mesaj)
     {
-        global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        Dispatcher.UIThread.Post(() =>
         {
             try { _aktifTunnel?.Dispose(); } catch { }
             _aktifTunnel = null;
             try { _lanIlani?.Durdur(); } catch { }
-            BrdHostBilgiBandi.IsVisible = false;
-            TxtHostBilgiMetni.Text = "";
-            if (!string.IsNullOrWhiteSpace(mesaj)) TxtTunelDurum.Text = mesaj;
-            _ = OdalariSunucudanYukleAsync();
+            if (_aktifKurulanOda != null)
+            {
+                _aktifKurulanOda.HerkeseAcik = false;
+                _aktifKurulanOda.MaskeliIp = "Yayınlanmadı (özel taslak)";
+                KategoriFiltresiniUygula();
+            }
+            BrdHostBilgiBandi.IsVisible = true;
+            TxtHostBilgiMetni.Text = "Oda yayından alındı (özel taslak).";
+            MesajGoster(mesaj, "Oda Kapatıldı");
         });
     }
 
-    private void BtnOdayiKapat_Click(object? s, RoutedEventArgs e) => YayindanDusur("Yayın kapatıldı.");
+    // Orijinal OdayiVeBaglantilariKapat: taslağı listeden kaldır, tüneli kapat.
+    private void OdayiVeBaglantilariKapat()
+    {
+        BrdHostBilgiBandi.IsVisible = false;
+        if (_aktifKurulanOda != null)
+        {
+            _tumOdalar.Remove(_aktifKurulanOda);
+            _aktifKurulanOda = null;
+        }
+        try { _aktifTunnel?.Dispose(); } catch { }
+        _aktifTunnel = null;
+        try { _lanIlani?.Durdur(); } catch { }
+    }
+
+    private void BtnOdayiKapat_Click(object? s, RoutedEventArgs e)
+    {
+        OdayiVeBaglantilariKapat();
+        KategoriFiltresiniUygula();
+    }
+
+    // ---- SUNUCU ALTYAPI MODU + DNS ADI ----
+    private async Task SunucuModunuYukleAsync()
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            string json;
+            try { json = await http.GetStringAsync("http://mc.jstudio.com.tr:80/api/info"); }
+            catch { json = await http.GetStringAsync("https://mc.jstudio.com.tr/api/info"); }
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            string mod = doc.RootElement.TryGetProperty("altyapiModu", out var m) ? (m.GetString() ?? "").ToLowerInvariant() : "";
+            _sunucuAltyapiModu = mod == "dns-ad" ? "dns-ad" : mod == "dns-sayi" ? "dns-sayi" : "port";
+        }
+        catch { }
+    }
+
+    // Orijinal DnsSlugUret birebir.
+    private static string DnsSlugUret(string ham)
+    {
+        try
+        {
+            string text = (ham ?? "").ToLowerInvariant().Replace('ı', 'i').Replace('ş', 's')
+                .Replace('ğ', 'g').Replace('ü', 'u').Replace('ö', 'o').Replace('ç', 'c');
+            var sb = new System.Text.StringBuilder();
+            foreach (char c in text)
+            {
+                if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) sb.Append(c);
+                else if (sb.Length > 0 && sb[^1] != '-') sb.Append('-');
+            }
+            string slug = sb.ToString().Trim('-');
+            if (slug.Length > 24) slug = slug[..24].Trim('-');
+            return slug.Length >= 3 ? slug : "";
+        }
+        catch { return ""; }
+    }
+
+    private void TxtDnsAdi_Degisti(object? s, TextChangedEventArgs e) => DnsOrnekYaz();
+
+    private void DnsOrnekYaz()
+    {
+        try
+        {
+            string text = (TxtDnsAdi.Text ?? "").Trim().ToLowerInvariant();
+            TxtDnsAdiOrnek.Text = string.IsNullOrEmpty(text) ? ".mc.jstudio.com.tr" : text + ".mc.jstudio.com.tr";
+        }
+        catch { }
+    }
+
+    // Orijinal OdaSunucuListesiniYukle: yerel sunucuları listele, açık olanı seç.
+    private async void OdaSunucuListesiniYukle()
+    {
+        try
+        {
+            var liste = SunucuYonetimi.YerelSunuculariTara();
+            var acikliklar = await Task.Run(() => liste
+                .Select(sk => { try { return SunucuYonetimi.PortDinliyorMu(sk.Port, 300); } catch { return false; } })
+                .ToList());
+            _odaSunucuPortlari.Clear();
+            CmbOdaSunucu.Items.Clear();
+            int sec = 0;
+            bool ilkAcik = false;
+            for (int i = 0; i < liste.Count; i++)
+            {
+                var sk = liste[i];
+                string etiket = $"{sk.Ad} (:{sk.Port}){(acikliklar[i] ? " • açık" : "")}";
+                CmbOdaSunucu.Items.Add(etiket);
+                _odaSunucuPortlari.Add(sk.Port);
+                if (acikliklar[i] && !ilkAcik) { sec = i; ilkAcik = true; }
+            }
+            if (liste.Count == 0)
+            {
+                CmbOdaSunucu.Items.Add("Yerel 25565 (sabit)");
+                _odaSunucuPortlari.Add(25565);
+            }
+            CmbOdaSunucu.SelectedIndex = sec;
+            if (sec < _odaSunucuPortlari.Count) TxtYerelPort.Text = _odaSunucuPortlari[sec].ToString();
+        }
+        catch { }
+    }
+
+    private void CmbOdaSunucu_Degisti(object? s, SelectionChangedEventArgs e)
+    {
+        try
+        {
+            int i = CmbOdaSunucu.SelectedIndex;
+            if (i >= 0 && i < _odaSunucuPortlari.Count) TxtYerelPort.Text = _odaSunucuPortlari[i].ToString();
+        }
+        catch { }
+    }
+
+    // Orijinal MaksOyuncuSecenekleriniUygula birebir (plan sınırına göre).
+    private void MaksOyuncuSecenekleriniUygula()
+    {
+        try
+        {
+            try
+            {
+                if (CmbPortKategorisi.Items.Count > 0 && CmbPortKategorisi.SelectedIndex < 0)
+                    CmbPortKategorisi.SelectedIndex = 1;
+            }
+            catch { }
+            int[] secenekler = { 2, 4, 6, 8, 12, 15, 20 };
+            CmbYeniOdaMaksOyuncu.Items.Clear();
+            int secili = 0;
+            for (int i = 0; i < secenekler.Length && secenekler[i] <= _oturum.PlanMaxOyuncu; i++)
+            {
+                CmbYeniOdaMaksOyuncu.Items.Add(new ComboBoxItem { Content = secenekler[i].ToString() });
+                secili = i;
+            }
+            if (CmbYeniOdaMaksOyuncu.Items.Count == 0)
+                CmbYeniOdaMaksOyuncu.Items.Add(new ComboBoxItem { Content = _oturum.PlanMaxOyuncu.ToString() });
+            else
+                CmbYeniOdaMaksOyuncu.SelectedIndex = secili;
+        }
+        catch { }
+    }
+
+    // ---- KENDİ ODAM (sahip eşleşmesi) ----
+    private OdaModel? KendiOdamBul(bool haritaSekmesi)
+    {
+        try
+        {
+            foreach (var o in _tumOdalar)
+                if (o != null && o.BenimOdam && (o.PortKategorisi == 1) == haritaSekmesi) return o;
+            if (_aktifKurulanOda != null && (_aktifKurulanOda.PortKategorisi == 1) == haritaSekmesi)
+                return _aktifKurulanOda;
+        }
+        catch { }
+        return null;
+    }
+
+    private void BtnSunucumuYonet_Click(object? s, RoutedEventArgs e)
+    {
+        try { ServerimGorunumunuGuncelle(); } catch { }
+        try
+        {
+            var oda = KendiOdamBul(haritaSekmesi: false);
+            if (oda != null)
+            {
+                BrdHostBilgiBandi.IsVisible = true;
+                TxtHostBilgiMetni.Text = $"Sunucun: '{oda.OdaAdi}' | Adres: {oda.MaskeliIp} | Durum: {oda.DurumMetni}";
+            }
+        }
+        catch { }
+        GrdServerimModal.IsVisible = true;
+    }
+
+    private void BtnYerelOdamYonet_Click(object? s, RoutedEventArgs e)
+    {
+        try
+        {
+            var oda = KendiOdamBul(haritaSekmesi: true) ?? _aktifKurulanOda;
+            if (oda == null)
+            {
+                MesajGoster("Henüz paylaştığın bir dünya yok.\n\nÖnce 'Oda Kur' ile dünyanı paylaş.", "Yerel Odam");
+                return;
+            }
+            string adres = oda.MaskeliIp ?? "";
+            if (!string.IsNullOrEmpty(adres))
+            {
+                try { KopyalaPanoya(adres); } catch { }
+            }
+            BrdHostBilgiBandi.IsVisible = true;
+            TxtHostBilgiMetni.Text = $"Yerel odan: '{oda.OdaAdi}' | Adres: {adres} (panoya kopyalandı)";
+        }
+        catch { }
+    }
+
+    // ---- YEREL MC TESPİTİ (5 sn) + OTOMATİK TASLAK ----
+    private static async Task<bool> YerelMcPortSinaAsync(int port, int zamanAsimiMs)
+    {
+        try
+        {
+            using var yoklama = new TcpClient();
+            var baglanti = yoklama.ConnectAsync("127.0.0.1", port);
+            return await Task.WhenAny(baglanti, Task.Delay(zamanAsimiMs)) == baglanti && yoklama.Connected;
+        }
+        catch { return false; }
+    }
+
+    private void YerelMcTespitiniBaslat()
+    {
+        _tespitZamanlayici = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _tespitZamanlayici.Tick += async (_, _) => await YerelMcTespitTurAsync();
+        _tespitZamanlayici.Start();
+        _ = YerelMcTespitTurAsync();
+
+        _odaListesiYenilemeZamanlayici = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _odaListesiYenilemeZamanlayici.Tick += async (_, _) =>
+        {
+            if (!_tespitDevamEdiyor) await OdalariSunucudanYukleAsync();
+        };
+        _odaListesiYenilemeZamanlayici.Start();
+    }
+
+    private async Task YerelMcTespitTurAsync()
+    {
+        if (_tespitDevamEdiyor) return;
+        _tespitDevamEdiyor = true;
+        try
+        {
+            bool bulundu = false;
+            int bulunanPort = 25565;
+            try
+            {
+                var portlar = new HashSet<int> { 25565 };
+                foreach (var sk in SunucuYonetimi.YerelSunuculariTara()) portlar.Add(sk.Port);
+                foreach (int p in portlar)
+                {
+                    if (await YerelMcPortSinaAsync(p, 300)) { bulundu = true; bulunanPort = p; break; }
+                }
+            }
+            catch { }
+            if (bulundu != _yerelMcBulundu)
+            {
+                _yerelMcBulundu = bulundu;
+                if (bulundu)
+                {
+                    TxtTunelDurum.Text = "Yerel MC bulundu (:" + bulunanPort + ")";
+                    OtomatikTaslakOlustur(bulunanPort);
+                }
+                else
+                {
+                    TxtTunelDurum.Text = "Yerel MC (25565): Bulunamadı";
+                    _otomatikTaslakOlusturuldu = false;
+                }
+            }
+        }
+        catch { }
+        finally { _tespitDevamEdiyor = false; }
+    }
+
+    // Orijinal OtomatikTaslakOlustur: yerel MC bulununca 1xxxx taslağı aç.
+    private void OtomatikTaslakOlustur(int port)
+    {
+        try
+        {
+            if (!_otomatikTaslakOlusturuldu && _aktifKurulanOda == null)
+            {
+                _otomatikTaslakOlusturuldu = true;
+                _aktifKurulanOda = new OdaModel
+                {
+                    Id = "oda-" + Guid.NewGuid().ToString("N")[..6],
+                    OdaAdi = "Yerel Minecraft Dünyam",
+                    Kurucu = _oturum.EkranNicki("SteveTR"),
+                    Kategori = "Survival",
+                    AktifOyuncu = 1,
+                    MaksOyuncu = 8,
+                    Surum = "1.20.1",
+                    YerelPort = port,
+                    PortKategorisi = 1,
+                    MaskeliIp = "Yayınlanmadı (özel taslak)",
+                    HerkeseAcik = false,
+                    BenimOdam = true,
+                    LanGoster = true,
+                };
+                _tumOdalar.Insert(0, _aktifKurulanOda);
+                KategoriFiltresiniUygula();
+                BrdHostBilgiBandi.IsVisible = true;
+                TxtHostBilgiMetni.Text = "Yerel Minecraft bulundu, özel taslak oluşturuldu. Yayınlamak için karttaki HERKESE AÇIK YAP'a bas.";
+            }
+        }
+        catch { }
+    }
 
     // ---- HESAP ----
     private void BtnHesap_Click(object? s, RoutedEventArgs e)
@@ -398,6 +902,7 @@ public partial class MainWindow : Window
             catch { }
             await HesapService.DurumuYukleAsync(_oturum);
             HesapRozetGuncelle();
+            ServerimButonunuGuncelle();
             if (_oturum.Token == null)
             {
                 TxtHesapDurum.Text = "Oturum süresi doldu, tekrar giriş yap.";
@@ -496,8 +1001,8 @@ public partial class MainWindow : Window
                 if (ms != null || await SunucuCalistirici.CevapBekleAsync(mevcutPort0))
                 {
                     GrdSunucuKurModal.IsVisible = false;
-                    ServerimGorunumunuGuncelle();
-                    KurDurum($"Sunucun zaten hazır ve çalışıyor! (:{mevcutPort0}) ODA YARAT ile yayınlayabilirsin.");
+                    ServerimButonunuGuncelle();
+                    MesajGoster($"Sunucun zaten hazır ve çalışıyor! (:{mevcutPort0})\n\nSunucular sekmesinde 'Sunucu Kur' ile taslak açıp HERKESE AÇIK YAP'a basabilirsin.", "Sunucum Hazır");
                     return;
                 }
                 KurDurum("Sunucu süreci ayakta ama yanıt vermiyor. Son log:\n" + SunucuYonetimi.LogKuyruguOku(klasor));
@@ -511,8 +1016,8 @@ public partial class MainWindow : Window
                 {
                     int p0 = PortOku(klasor);
                     GrdSunucuKurModal.IsVisible = false;
-                    ServerimGorunumunuGuncelle();
-                    KurDurum($"Sunucun hazır ve çalışıyor! (:{p0}) Şimdi ODA YARAT ile yayınlayabilirsin.");
+                    ServerimButonunuGuncelle();
+                    MesajGoster($"Sunucun hazır ve çalışıyor! (:{p0})\n\nSunucular sekmesinde 'Sunucu Kur' ile taslak açıp HERKESE AÇIK YAP'a basabilirsin.", "Sunucum Hazır");
                     return;
                 }
                 KurDurum("Başlatılamadı. Son log:\n" + SunucuYonetimi.LogKuyruguOku(klasor) + "\nTam kurulum deneniyor...");
@@ -572,8 +1077,8 @@ public partial class MainWindow : Window
             if (await SunucuCalistirici.CevapBekleAsync(hedefPort))
             {
                 GrdSunucuKurModal.IsVisible = false;
-                ServerimGorunumunuGuncelle();
-                KurDurum($"Sunucun hazır ve çalışıyor! (:{hedefPort}) Şimdi ODA YARAT ile yayınlayabilirsin.");
+                ServerimButonunuGuncelle();
+                MesajGoster($"Sunucun hazır ve çalışıyor! (:{hedefPort})\n\nSunucular sekmesinde 'Sunucu Kur' ile taslak açıp HERKESE AÇIK YAP'a basabilirsin.", "Sunucum Hazır");
             }
             else KurDurum(hedefPort + " portu açılmadı. Son log:\n" + SunucuYonetimi.LogKuyruguOku(klasor));
             }
@@ -823,7 +1328,7 @@ public partial class MainWindow : Window
                 return;
             }
             if (await SunucuCalistirici.BaslaAsync(klasor, 2048) == SunucuCalistirici.BaslaSonucu.Hata)
-            { TxtServerimDurum.Text = "Başlatılamadı. Java kurulu mu? (SUNUCU KUR Java'yı otomatik indirir)"; return; }
+            { TxtServerimDurum.Text = "Başlatılamadı. Java kurulu mu? (Paper Kur Java'yı otomatik indirir)"; return; }
             TxtServerimDurum.Text = "Başlatma komutu verildi, port yoklanıyor...";
             int port = _seciliSunucu.Port;
             bool ok = await SunucuCalistirici.CevapBekleAsync(port);

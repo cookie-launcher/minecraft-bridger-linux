@@ -6,6 +6,10 @@ mümkün olduğunca yakın sadelikte yeniden yazılmıştır.
 
 ## Özellikler
 
+- **İki sekmeli lobi** (orijinal en son istemciyle eşit): **Sunucular** (2xxxx+ port aralığı) ve **Yerel Dünyalar** (1xxxx)
+- **6 port kategorisi**: 1xxxx Yerel Harita, 2xxxx Sunucu, 3xxxx Mini Oyun, 4xxxx Topluluk, 5xxxx Resmi Sunucu, 6xxxx Özel Etkinlik
+- **Özel taslak akışı**: `Oda Kur`/`Sunucu Kur` ile taslak açılır (listede yalnızca sende görünür), karttaki **HERKESE AÇIK YAP** ile sunucuda yayınlanır; `Odayı Kapat` ile geri alınır
+- Yerel MC otomatik tespiti (5 sn'de bir) → bulununca otomatik yerel dünya taslağı
 - Oda listesi + oda yayınlama (WebSocket tüneli: `CREATE_ROOM`, oyuncu trafiği pompası, `DURUM_SOR` canlı durum)
 - Native **Wayland** desteği (Avalonia 12.1 Wayland backend'i; Wayland yoksa otomatik X11'e düşer, `BRIDGER_X11=1` ile X11 zorlanır)
 - LAN ilanı (224.0.2.60:4445 çoklu yayını; Minecraft "LAN Dünyaları" listesinde görünür)
