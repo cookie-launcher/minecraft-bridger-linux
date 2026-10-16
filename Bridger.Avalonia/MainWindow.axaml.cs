@@ -46,7 +46,25 @@ public partial class MainWindow : Window
             // Orijinal DurumuYukleAsync sonu: "sunucuOtomatik" açıksa kurulu sunucuları başlat.
             SunuculariOtomatikBaslat();
         }
+        HesapRozetGuncelle();
         await OdalariSunucudanYukleAsync();
+    }
+
+    // Üst bardaki giriş rozeti: yeşil = oturum açık, amber = giriş yapılmadı.
+    private void HesapRozetGuncelle()
+    {
+        try
+        {
+            bool girisli = !string.IsNullOrEmpty(_oturum.Token) && !string.IsNullOrEmpty(_oturum.Kullanici);
+            ElpHesapDurum.Fill = new SolidColorBrush(girisli
+                ? Color.FromRgb(0, 230, 118)
+                : Color.FromRgb(255, 171, 0));
+            TxtHesapRozet.Text = girisli ? _oturum.EkranNicki("Hesap") : "Giriş yapılmadı";
+            ToolTip.SetTip(BtnHesap, girisli
+                ? $"Hesap: {_oturum.EkranNicki()} | {_oturum.PlanAdi} — pencereyi açmak için tıkla"
+                : "Giriş yapmak için tıkla");
+        }
+        catch { }
     }
 
     // Orijinal: _ayarSunucuOtomatik ise portu kapalı olan kurulu sunucuları başlat.
@@ -327,7 +345,18 @@ public partial class MainWindow : Window
     // ---- HESAP ----
     private void BtnHesap_Click(object? s, RoutedEventArgs e)
     {
-        TxtHesapBilgi.Text = string.IsNullOrEmpty(_oturum.Kullanici) ? "Giriş yapmadın" : _oturum.BilgiMetni();
+        HesapRozetGuncelle();
+        bool girisli = !string.IsNullOrEmpty(_oturum.Token) && !string.IsNullOrEmpty(_oturum.Kullanici);
+        TxtHesapBilgi.Text = girisli ? _oturum.BilgiMetni() : "Giriş yapmadın";
+        StkHesapForm.IsVisible = !girisli;
+        BtnHesapKayitOl.IsVisible = !girisli;
+        BtnHesapGirisYap.IsVisible = !girisli;
+        TxtHesapOturumNotu.IsVisible = girisli;
+        if (girisli)
+            TxtHesapOturumNotu.Text = File.Exists(LinuxStorage.BeniHatirlaDosyasi())
+                ? "Oturum açık — bu cihazda açılışta otomatik giriş yapılır."
+                : "Oturum açık.";
+        TxtHesapDurum.Text = "";
         GrdHesapGiris.IsVisible = true;
     }
 
@@ -369,6 +398,7 @@ public partial class MainWindow : Window
             }
             catch { }
             await HesapService.DurumuYukleAsync(_oturum);
+            HesapRozetGuncelle();
             if (_oturum.Token == null)
             {
                 TxtHesapDurum.Text = "Oturum süresi doldu, tekrar giriş yap.";
@@ -428,6 +458,7 @@ public partial class MainWindow : Window
     {
         if (string.IsNullOrEmpty(_oturum.Token)) { KurDurum("Önce giriş yapmalısın."); return; }
         await HesapService.DurumuYukleAsync(_oturum);
+        HesapRozetGuncelle();
         if (string.IsNullOrEmpty(_oturum.Token)) { KurDurum("Oturum süresi doldu, tekrar giriş yap."); return; }
         TxtHesapBilgi.Text = _oturum.BilgiMetni();
         if (_oturum.SunucuSayisi >= _oturum.PlanMaksSunucu)
