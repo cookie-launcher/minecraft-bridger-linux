@@ -7,6 +7,7 @@ mümkün olduğunca yakın sadelikte yeniden yazılmıştır.
 ## Özellikler
 
 - Oda listesi + oda yayınlama (WebSocket tüneli: `CREATE_ROOM`, oyuncu trafiği pompası, `DURUM_SOR` canlı durum)
+- Native **Wayland** desteği (Avalonia 12.1 Wayland backend'i; Wayland yoksa otomatik X11'e düşer, `BRIDGER_X11=1` ile X11 zorlanır)
 - LAN ilanı (224.0.2.60:4445 çoklu yayını; Minecraft "LAN Dünyaları" listesinde görünür)
 - Odaya katılma sinyali (`JOIN_ROOM`) ve panoya tünel IP'si kopyalama
 - Sunucu kurulumu: Paper indirme (katalog + `fill.papermc.io`), eula, `server.properties`, ops/whitelist (çevrimdışı UUID), `start.sh`

@@ -13,12 +13,19 @@ class Program
         .StartWithClassicDesktopLifetime(args);
 
     // Avalonia configuration, don't remove; also used by visual designer.
+    // Wayland varsa native Wayland, yoksa X11/XWayland'e düşer
+    // (UseWaylandWithFallback, Avalonia 12.1+). X11 zorlamak için: BRIDGER_X11=1
     public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
-            .UsePlatformDetect()
+    {
+        var builder = AppBuilder.Configure<App>()
+            .UsePlatformDetect();
+        if (OperatingSystem.IsLinux() && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("BRIDGER_X11")))
+            builder = builder.UseWaylandWithFallback();
+        return builder
 #if DEBUG
             .WithDeveloperTools()
 #endif
             .WithInterFont()
             .LogToTrace();
+    }
 }
