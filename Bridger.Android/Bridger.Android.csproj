@@ -9,9 +9,11 @@
     <ApplicationId>com.jstudio.bridger</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
-    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <AndroidPackageFormats>apk</AndroidPackageFormats>
     <!-- Spike: hızlı derleme için AOT kapalı -->
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <!-- Core, yansımalı System.Text.Json kullanıyor; trim kapatık (en azından şimdilik). -->
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
