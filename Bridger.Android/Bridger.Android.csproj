@@ -15,8 +15,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia.Android" Version="12.1.4" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <!-- Not: Avalonia.Android 12.x yalnızca net10.0-android hedefliyor;
+         .NET 9 bandında 11.3.x kullanılır (masaüstü 12.1.4'ten bağımsız —
+         Core hiçbir Avalonia paketine bağlı değil). -->
+    <PackageReference Include="Avalonia.Android" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
     <!-- Gömülü JRE'nin tar.xz paketlerini açmak için (xz akışı) -->
     <PackageReference Include="SharpCompress" Version="0.50.5" />
   </ItemGroup>
