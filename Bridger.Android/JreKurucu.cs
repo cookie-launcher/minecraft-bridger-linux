@@ -14,11 +14,23 @@ public static class JreKurucu
 
     public static bool Hazir => File.Exists(Path.Combine(HedefKok, "release"));
 
+    private static readonly SemaphoreSlim _kilit = new(1, 1);
+
     public static async Task<bool> GerekirseCikarAsync(Action<string>? durum = null,
         CancellationToken ct = default)
     {
         if (Hazir) return true;
+        await _kilit.WaitAsync(ct);
+        try
+        {
+            if (Hazir) return true;
+            return await CikarAsync(durum, ct);
+        }
+        finally { _kilit.Release(); }
+    }
 
+    private static async Task<bool> CikarAsync(Action<string>? durum, CancellationToken ct)
+    {
         var ctx = global::Android.App.Application.Context;
         string abi = RuntimeInformation.ProcessArchitecture switch
         {

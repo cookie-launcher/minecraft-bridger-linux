@@ -17,14 +17,40 @@ public partial class MainView : UserControl
     {
         InitializeComponent();
         _sag = Platform.SunucuBaslatici as GomuluJvmBaslatici;
+        Loaded += (_, _) => _ = JreHazirlaAsync();
     }
 
     private string SunucuKlasoru()
         => Path.Combine(LinuxStorage.VeriKok, "sunucum", "test");
 
+    // Gömülü JRE'yi ilk açılışta asset'lerden çıkarır (arka planda).
+    private async Task JreHazirlaAsync()
+    {
+        try
+        {
+            if (JreKurucu.Hazir) { TxtDurum.Text = "JRE hazır."; return; }
+            TxtDurum.Text = "JRE çıkarılıyor (ilk açılış, 1-2 dk)...";
+            bool tamam = await JreKurucu.GerekirseCikarAsync(
+                m => Dispatcher.UIThread.Post(() => TxtDurum.Text = m));
+            Dispatcher.UIThread.Post(() => TxtDurum.Text = tamam
+                ? "JRE hazır. paper.jar yükle, sonra Başlat."
+                : "JRE çıkarılamadı (assets eksik olabilir).");
+        }
+        catch (Exception ex)
+        {
+            Dispatcher.UIThread.Post(() => TxtDurum.Text = "JRE hatası: " + ex.Message);
+        }
+    }
+
     private async void BtnBaslat_Click(object? s, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_sag == null) { TxtDurum.Text = "Gömülü JVM sağlayıcısı yok."; return; }
+        if (!JreKurucu.Hazir)
+        {
+            TxtDurum.Text = "JRE hazırlanıyor, bekleniyor...";
+            for (int i = 0; i < 180 && !JreKurucu.Hazir; i++) await Task.Delay(1000);
+            if (!JreKurucu.Hazir) { TxtDurum.Text = "JRE hazır değil (yukarıdaki mesaja bak)."; return; }
+        }
         string klasor = SunucuKlasoru();
         if (!File.Exists(Path.Combine(klasor, "paper.jar")))
         {

@@ -41,13 +41,7 @@ public class App : global::Avalonia.Application
         Platform.KimlikTabanGecersizKilma =
             Settings.Secure.GetString(ctx.ContentResolver, Settings.Secure.AndroidId);
 
-        // Gömülü JVM sağlayıcısı (JRE ilk açılışta çıkarılır).
+        // Gömülü JVM sağlayıcısı (JRE ilk açılışta JreKurucu ile çıkarılır).
         Platform.SunucuBaslatici = new GomuluJvmBaslatici(Path.Combine(files, "jre21"));
-
-        // JRE çıkarımı arka planda (assets varsa; hata olsa da uygulama açılır).
-        _ = Task.Run(async () =>
-        {
-            try { await JreKurucu.GerekirseCikarAsync(); } catch { }
-        });
     }
 }
