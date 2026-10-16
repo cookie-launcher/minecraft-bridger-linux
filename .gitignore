@@ -1,0 +1,16 @@
+# Derleme çıktıları
+bin/
+obj/
+yayin/
+yayin-ui/
+
+# Editör / yerel
+.vs/
+.idea/
+*.user
+*.suo
+*.swp
+*~
+
+# Yerel test kalıntıları
+*.log
