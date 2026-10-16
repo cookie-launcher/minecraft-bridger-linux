@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Bridger.Android.MainView">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="12">
+    <TextBlock Grid.Row="0" Text="Minecraft Bridger — Android (spike)"
+               FontSize="20" FontWeight="Bold" TextWrapping="Wrap" />
+    <TextBlock Grid.Row="1" x:Name="TxtDurum" Text="Hazır."
+               TextWrapping="Wrap" Margin="0,8,0,0" />
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+      <Button x:Name="BtnBaslat" Content="Sunucuyu Başlat (JVM)" Click="BtnBaslat_Click" />
+      <Button x:Name="BtnDurdur" Content="Durdur (stop)" Click="BtnDurdur_Click" IsEnabled="False" />
+    </StackPanel>
+    <TextBlock Grid.Row="3" Text="Konsol:" Margin="0,12,0,4" />
+    <TextBox Grid.Row="4" x:Name="TxtKonsol" IsReadOnly="True"
+             AcceptsReturn="True" TextWrapping="NoWrap"
+             FontFamily="monospace" FontSize="11" />
+  </Grid>
+</UserControl>
