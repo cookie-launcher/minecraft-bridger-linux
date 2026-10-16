@@ -20,7 +20,6 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<OdaModel> _filtreliOdalar = new();
     private string _seciliKategori = "Tüm Odalar";
     private readonly HesapOturumu _oturum = new();
-    private Process? _serverProc;
     private TunnelIstemcisi? _aktifTunnel;
     private LanIlani? _lanIlani;
     private SunucuKaydi? _seciliSunucu;
@@ -68,7 +67,7 @@ public partial class MainWindow : Window
     }
 
     // Orijinal: _ayarSunucuOtomatik ise portu kapalı olan kurulu sunucuları başlat.
-    private void SunuculariOtomatikBaslat()
+    private async void SunuculariOtomatikBaslat()
     {
         try
         {
@@ -79,7 +78,7 @@ public partial class MainWindow : Window
                 try
                 {
                     if (!SunucuYonetimi.PortDinliyorMu(sk.Port, 400))
-                        SunucuyuBaslat(sk.Klasor, SunucuYonetimi.KlasorJavaExe(sk.Klasor));
+                        await SunucuCalistirici.BaslaAsync(sk.Klasor, 2048);
                 }
                 catch { }
             }
@@ -491,10 +490,10 @@ public partial class MainWindow : Window
             int mevcutPort0 = PortOku(klasor);
             if (SunucuYonetimi.SunucuCalisiyorMu(klasor, mevcutPort0, out int calisanPid))
             {
-                SunucuYonetimi.PidDosyasiniTazele(klasor);
+                SunucuCalistirici.Baglan(klasor, mevcutPort0, calisanPid);
                 KurDurum($"Sunucu zaten çalışıyor (pid {calisanPid}, :{mevcutPort0}). Durum kontrol ediliyor...");
                 var (ms, _) = await McProtocol.YerelDurumSorAsync("127.0.0.1", mevcutPort0, zamanAsimiMs: 2000);
-                if (ms != null || await SunucuCevapBekleAsync(mevcutPort0, null, calisanPid, klasor))
+                if (ms != null || await SunucuCalistirici.CevapBekleAsync(mevcutPort0))
                 {
                     GrdSunucuKurModal.IsVisible = false;
                     ServerimGorunumunuGuncelle();
@@ -507,8 +506,8 @@ public partial class MainWindow : Window
             if (File.Exists(Path.Combine(klasor, "server.properties")) && File.Exists(Path.Combine(klasor, "paper.jar")))
             {
                 KurDurum("Mevcut sunucu bulundu, başlatılıyor...");
-                if (SunucuyuBaslat(klasor, SunucuYonetimi.KlasorJavaExe(klasor)) &&
-                    await SunucuCevapBekleAsync(PortOku(klasor), _serverProc, null, klasor))
+                if (await SunucuCalistirici.BaslaAsync(klasor, 2048) != SunucuCalistirici.BaslaSonucu.Hata &&
+                    await SunucuCalistirici.CevapBekleAsync(PortOku(klasor)))
                 {
                     int p0 = PortOku(klasor);
                     GrdSunucuKurModal.IsVisible = false;
@@ -568,9 +567,9 @@ public partial class MainWindow : Window
             await File.WriteAllTextAsync(Path.Combine(klasor, "start.sh"),
                 "#!/bin/sh\ncd \"$(dirname \"$0\")\"\nexec \"" + javaExe + "\" -Xmx2G -jar paper.jar nogui\n");
             try { if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(Path.Combine(klasor, "start.sh"), UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); } catch { }
-            if (!SunucuyuBaslat(klasor, javaExe)) { KurDurum("Başlatılamadı (klasörü açıp start.sh dosyasını el ile çalıştır)"); return; }
+            if (await SunucuCalistirici.BaslaAsync(klasor, 2048) == SunucuCalistirici.BaslaSonucu.Hata) { KurDurum("Başlatılamadı (klasörü açıp start.sh dosyasını el ile çalıştır)"); return; }
             KurDurum("Sunucu açılıyor, port yoklanıyor...");
-            if (await SunucuCevapBekleAsync(hedefPort, _serverProc, null, klasor))
+            if (await SunucuCalistirici.CevapBekleAsync(hedefPort))
             {
                 GrdSunucuKurModal.IsVisible = false;
                 ServerimGorunumunuGuncelle();
@@ -809,44 +808,6 @@ public partial class MainWindow : Window
         catch (Exception ex) { TxtServerimDurum.Text = "Kaydedilemedi: " + ex.Message; }
     }
 
-    private bool SunucuyuBaslat(string klasor, string javaExe)
-    {
-        try
-        {
-            // Aynı klasörde çalışan sunucu varsa ikinci kopya açma (world/session.lock).
-            if (SunucuYonetimi.SunucuCalisiyorMu(klasor, PortOku(klasor), out _))
-            {
-                SunucuYonetimi.PidDosyasiniTazele(klasor);
-                return true;
-            }
-            _serverProc = Process.Start(new ProcessStartInfo(javaExe, "-Xmx2G -jar paper.jar nogui")
-            {
-                WorkingDirectory = klasor, UseShellExecute = false,
-            });
-            if (_serverProc != null)
-            {
-                try { File.WriteAllText(Path.Combine(klasor, "bridger.pid"), _serverProc.Id.ToString()); } catch { }
-                return true;
-            }
-        }
-        catch { }
-        return false;
-    }
-
-    // MC cevabı gelene kadar bekler (40×3 sn); süreç/pid öldüyse erken çıkar.
-    private async Task<bool> SunucuCevapBekleAsync(int port, Process? proc, int? pid, string klasor)
-    {
-        for (int i = 0; i < 40; i++)
-        {
-            await Task.Delay(3000);
-            if (proc is { HasExited: true }) return false;
-            if (pid is > 0 && !Directory.Exists($"/proc/{pid.Value}")) return false;
-            var (m, _) = await McProtocol.YerelDurumSorAsync("127.0.0.1", port, zamanAsimiMs: 1000);
-            if (m != null) return true;
-        }
-        return false;
-    }
-
     private async void BtnServerBaslat_Click(object? s, RoutedEventArgs e)
     {
         try
@@ -857,15 +818,15 @@ public partial class MainWindow : Window
             if (!File.Exists(jar)) { TxtServerimDurum.Text = "paper.jar yok: " + klasor; return; }
             if (SunucuYonetimi.SunucuCalisiyorMu(klasor, _seciliSunucu.Port, out int pid0))
             {
-                SunucuYonetimi.PidDosyasiniTazele(klasor);
+                SunucuCalistirici.Baglan(klasor, _seciliSunucu.Port, pid0);
                 TxtServerimDurum.Text = $"Zaten çalışıyor (pid {pid0}, :{_seciliSunucu.Port}).";
                 return;
             }
-            if (!SunucuyuBaslat(klasor, SunucuYonetimi.KlasorJavaExe(klasor)))
+            if (await SunucuCalistirici.BaslaAsync(klasor, 2048) == SunucuCalistirici.BaslaSonucu.Hata)
             { TxtServerimDurum.Text = "Başlatılamadı. Java kurulu mu? (SUNUCU KUR Java'yı otomatik indirir)"; return; }
             TxtServerimDurum.Text = "Başlatma komutu verildi, port yoklanıyor...";
             int port = _seciliSunucu.Port;
-            bool ok = await SunucuCevapBekleAsync(port, _serverProc, null, klasor);
+            bool ok = await SunucuCalistirici.CevapBekleAsync(port);
             TxtServerimDurum.Text = ok
                 ? $"Sunucu açık (:{port})."
                 : "Sunucu açılmadı. Son log:\n" + SunucuYonetimi.LogKuyruguOku(klasor);
@@ -880,7 +841,7 @@ public partial class MainWindow : Window
         {
             if (_seciliSunucu == null) { TxtServerimDurum.Text = "Önce listeden sunucu seç."; return; }
             // Orijinal: bridger.pid'deki süreci durdur — orphan sunucuları da keser.
-            TxtServerimDurum.Text = SunucuYonetimi.SunucuyuDurdur(_seciliSunucu.Klasor);
+            TxtServerimDurum.Text = SunucuCalistirici.Durdur(_seciliSunucu.Klasor);
             ServerimGorunumunuGuncelle();
         }
         catch (Exception ex) { TxtServerimDurum.Text = "Durdurulamadı: " + ex.Message; }

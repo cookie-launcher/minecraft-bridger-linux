@@ -90,6 +90,7 @@ public static class SunucuYonetimi
     // Orijinal KlasorJavaExe: klasördeki gömülü java, yoksa "java".
     public static string KlasorJavaExe(string klasor)
     {
+        if (Platform.GomuluJvm) return "java"; // Android: java ikilisi yok, JVM gömülü
         try
         {
             foreach (string aday in new[]
@@ -104,9 +105,10 @@ public static class SunucuYonetimi
 
     // --- Linux süreç yardımcıları (orijinal Process.GetProcessById portu) ---
 
-    // bridger.pid dosyasındaki pid (yoksa null).
+    // bridger.pid dosyasındaki pid (yoksa null). Android'de süreç modeli yok.
     public static int? PidOku(string klasor)
     {
+        if (Platform.GomuluJvm) return null;
         try
         {
             string f = Path.Combine(klasor, "bridger.pid");
@@ -180,9 +182,12 @@ public static class SunucuYonetimi
         catch { }
     }
 
-    // Klasördeki sunucu çalışıyor mu? Önce gerçek süreç, sonra port.
+    // Klasördeki sunucu çalışıyor mu? Android'de gömülü JVM sağlayıcısı yanıtlar;
+    // masaüstünde önce gerçek süreç, sonra port.
     public static bool SunucuCalisiyorMu(string klasor, int port, out int pid)
     {
+        var sag = Platform.SunucuBaslatici;
+        if (sag != null) return sag.CalisiyorMu(klasor, port, out pid);
         pid = 0;
         int? p = CalisanPidiBul(klasor);
         if (p.HasValue) { pid = p.Value; return true; }
@@ -193,6 +198,8 @@ public static class SunucuYonetimi
     // pid dosyasını temizler. Orphan (başka oturumdan kalmış) sunucuları da keser.
     public static string SunucuyuDurdur(string klasor)
     {
+        var sag = Platform.SunucuBaslatici;
+        if (sag != null) return sag.Durdur(klasor);
         bool oldu = false;
         int? p = CalisanPidiBul(klasor);
         if (p.HasValue)

@@ -6,14 +6,16 @@ namespace Bridger.Core;
 public static class LinuxStorage
 {
     public static string Kok =>
-        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } xdg
+        Platform.KokGecersizKilma ??
+        (Environment.GetEnvironmentVariable("XDG_CONFIG_HOME") is { Length: > 0 } xdg
             ? Path.Combine(xdg, "minecraft-bridger")
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "minecraft-bridger");
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "minecraft-bridger"));
 
     public static string VeriKok =>
-        Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { Length: > 0 } xdg
+        Platform.VeriKokGecersizKilma ??
+        (Environment.GetEnvironmentVariable("XDG_DATA_HOME") is { Length: > 0 } xdg
             ? Path.Combine(xdg, "minecraft-bridger")
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "minecraft-bridger");
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share", "minecraft-bridger"));
 
     public static string VarsayilanSunucumKlasoru()
     {
@@ -75,6 +77,12 @@ public static class LinuxStorage
     public static string DonanimKimligi()
     {
         if (!string.IsNullOrEmpty(_makineKimligi)) return _makineKimligi;
+        // Android: uygulama ANDROID_ID'yi taban olarak verir (makine-id okunamaz).
+        if (Platform.KimlikTabanGecersizKilma is { Length: > 0 } taban)
+        {
+            string t = taban.Trim().Replace(" ", "").ToLowerInvariant();
+            if (t.Length >= 16) return _makineKimligi = Sha256Hex("bridger-hwid-v1|" + t);
+        }
         try
         {
             string metin = File.ReadAllText("/etc/machine-id").Trim().Replace(" ", "").ToLowerInvariant();
