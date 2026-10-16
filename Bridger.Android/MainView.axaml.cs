@@ -105,6 +105,7 @@ public partial class MainView : UserControl
         }
         catch (Exception ex)
         {
+            global::Android.Util.Log.Error("BridgerSpike", "JRE hatası: " + ex);
             TxtDurum.Text = "JRE hatası: " + ex.Message;
             return;
         }
@@ -115,6 +116,7 @@ public partial class MainView : UserControl
         }
         catch (Exception ex)
         {
+            global::Android.Util.Log.Error("BridgerSpike", "Dosya hazırlama hatası: " + ex);
             TxtDurum.Text = "Dosya hazırlama hatası: " + ex.Message;
             return;
         }
@@ -169,10 +171,13 @@ public partial class MainView : UserControl
                 kod => Dispatcher.UIThread.Post(() => TxtDurum.Text = $"Sunucu kapandı (kod {kod})."));
             if (_islem == null)
             {
+                global::Android.Util.Log.Error("BridgerSpike",
+                    "JVM başlatılamadı: " + (_sag.Hata ?? "bilinmeyen hata"));
                 TxtDurum.Text = "Başlatılamadı: " + (_sag.Hata ?? "bilinmeyen hata");
                 BtnBaslat.IsEnabled = true;
                 return;
             }
+            global::Android.Util.Log.Info("BridgerSpike", "JVM başlatıldı (pid?)");
             BtnDurdur.IsEnabled = true;
             TxtDurum.Text = "JVM çalışıyor. Port yoklanıyor (:25565)...";
 
@@ -199,6 +204,7 @@ public partial class MainView : UserControl
             var (motd, _) = await McProtocol.YerelDurumSorAsync("127.0.0.1", 25565, zamanAsimiMs: 1500);
             if (motd != null)
             {
+                global::Android.Util.Log.Info("BridgerSpike", "SUNUCU AYAKTA! MOTD: " + motd);
                 Dispatcher.UIThread.Post(() =>
                 {
                     TxtDurum.Text = "SUNUCU AYAKTA! (:25565) MOTD: " + motd;

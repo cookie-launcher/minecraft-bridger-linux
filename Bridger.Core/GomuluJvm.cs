@@ -122,6 +122,10 @@ public sealed class GomuluJvm : IDisposable
             string ana = anaSinif ?? AnaSinifBul(jarYolu)
                 ?? throw new InvalidOperationException("MANIFEST'te Main-Class yok: " + jarYolu);
 
+            // Paperclip/vanilla göreli yolları CWD'ye çözer; masaüstüyle aynı düzen
+            // için CWD = sunucu klasörü (world/, plugins/, cache/ orada oluşsun).
+            string sunucuKok = Path.GetDirectoryName(Path.GetFullPath(jarYolu))!;
+
             var secenekler = new List<string>
             {
                 $"-Xmx{xmxMb}M",
@@ -136,12 +140,22 @@ public sealed class GomuluJvm : IDisposable
                 "-Dstderr.encoding=UTF-8",
                 "-Dsun.jnu.encoding=UTF-8",
                 "-Duser.home=" + Path.Combine(CalismaKok, "kullanici"),
+                "-Duser.dir=" + sunucuKok,
                 "-Djava.io.tmpdir=" + Path.Combine(CalismaKok, "tmp"),
                 "-Duser.language=tr",
                 "-Duser.country=TR",
                 "-Dterminal.jline=false",
                 "-Dterminal.ansi=false",
+                // Pojav JRE'sinin sürüm dizesi "21.0.1-internal" gibi GA olmayan bir
+                // dizedir; Paper bunu reddediyor. Paper'ın kendi resmi atlama anahtarı
+                // (Main.java: Boolean.getBoolean("Paper.IgnoreJavaVersion")).
+                "-DPaper.IgnoreJavaVersion=true",
             };
+
+            // Paperclip göreli yolları işletim sistemi CWD'sine göre çözer (user.dir
+            // özelliği syscall'ları etkilemez); sunucu klasörüne geçmezsek "cache/..."
+            // Android'in yazılamayan /cache dizinine çözülür. CWD = sunucu klasörü.
+            try { Jni.Chdir(sunucuKok); } catch { }
 
             var vmSonuc = Jni.CreateJavaVm(createFn, secenekler.ToArray());
             _vm = vmSonuc.vm;

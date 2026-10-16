@@ -65,32 +65,54 @@ public static class JreKurucu
         CancellationToken ct)
     {
         string hedefTam = Path.GetFullPath(HedefKok);
-        using var asset = ctx.Assets!.Open(assetYolu);
-        using var xz = new XZStream(asset);
-        using var tar = new TarReader(xz);
 
-        TarEntry? giris;
-        while ((giris = tar.GetNextEntry()) != null)
+        // AssetManager akışı aranamaz (non-seekable); SharpCompress XZStream ise
+        // XZ dosyasının sonundaki dizini okumak için aranabilir akış ister.
+        // Bu yüzden önce önbelleğe geçici dosya olarak kopyalarız.
+        string gecici = Path.Combine(ctx.CacheDir!.AbsolutePath,
+            Path.GetFileName(assetYolu) + ".tmp");
+        global::Android.Util.Log.Info("BridgerSpike", "JRE çıkarımı: " + assetYolu);
+        try
         {
-            ct.ThrowIfCancellationRequested();
+            using (var asset = ctx.Assets!.Open(assetYolu))
+            using (var kopya = File.Create(gecici))
+                asset.CopyTo(kopya);
 
-            string ad = giris.Name.Replace('\\', '/').TrimStart('/');
-            if (ad.Length == 0) continue;
-            string yol = Path.GetFullPath(Path.Combine(hedefTam, ad));
-            if (!yol.StartsWith(hedefTam, StringComparison.Ordinal)) continue; // zip-slip koruması
+            using var kaynak = File.OpenRead(gecici);
+            using var xz = new XZStream(kaynak);
+            using var tar = new TarReader(xz);
 
-            if (giris.EntryType == TarEntryType.Directory)
+            TarEntry? giris;
+            int sayac = 0;
+            while ((giris = tar.GetNextEntry()) != null)
             {
-                Directory.CreateDirectory(yol);
-                continue;
-            }
-            if (giris.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile))
-                continue;
+                ct.ThrowIfCancellationRequested();
 
-            Directory.CreateDirectory(Path.GetDirectoryName(yol)!);
-            using (var cikti = File.Create(yol))
-                giris.DataStream!.CopyTo(cikti);
-            try { File.SetUnixFileMode(yol, giris.Mode); } catch { }
+                string ad = giris.Name.Replace('\\', '/').TrimStart('/');
+                if (ad.Length == 0) continue;
+                string yol = Path.GetFullPath(Path.Combine(hedefTam, ad));
+                if (!yol.StartsWith(hedefTam, StringComparison.Ordinal)) continue; // zip-slip koruması
+
+                if (giris.EntryType == TarEntryType.Directory)
+                {
+                    Directory.CreateDirectory(yol);
+                    continue;
+                }
+                if (giris.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile))
+                    continue;
+
+                Directory.CreateDirectory(Path.GetDirectoryName(yol)!);
+                using (var cikti = File.Create(yol))
+                    giris.DataStream!.CopyTo(cikti);
+                try { File.SetUnixFileMode(yol, giris.Mode); } catch { }
+                sayac++;
+            }
+            global::Android.Util.Log.Info("BridgerSpike",
+                $"JRE çıkarıldı: {assetYolu} ({sayac} girdi)");
+        }
+        finally
+        {
+            try { File.Delete(gecici); } catch { }
         }
     }
 }

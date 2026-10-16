@@ -238,4 +238,12 @@ internal static class Jni
         }
         finally { Marshal.FreeHGlobal(envOut); }
     }
+
+    // Süreç çalışma dizinini değiştirir. Paperclip gibi göreli yollar ("cache/...")
+    // kullanan Java kodları için şart: Android'de süreç CWD'si "/" olur ve göreli
+    // yollar yazılamayan sistem dizinlerine çözülür (ör. /cache).
+    [DllImport("libc", EntryPoint = "chdir", CharSet = CharSet.Ansi)]
+    private static extern int libc_chdir(string yol);
+
+    public static int Chdir(string yol) => libc_chdir(yol);
 }

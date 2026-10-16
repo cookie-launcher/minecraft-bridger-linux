@@ -35,6 +35,18 @@ jobs:
             https://github.com/PojavLauncherTeam/PojavLauncher/releases/download/gladiolus/PojavLauncher.apk
           ./tools/jre-hazirla.sh /tmp/PojavLauncher.apk
 
+      - name: Sunucu varlıklarını hazırla (gömülü Paper + eula + server.properties)
+        run: |
+          mkdir -p Bridger.Android/Assets/spike
+          printf 'eula=true\n' > Bridger.Android/Assets/spike/eula.txt
+          printf 'online-mode=false\nmotd=Android JVM Testi\nserver-port=25565\nlevel-name=dunya\nlevel-type=flat\nspawn-protection=0\nmax-players=3\nview-distance=4\nsimulation-distance=4\n' \
+            > Bridger.Android/Assets/spike/server.properties
+          PAPER_URL=$(python3 -c 'import json,urllib.request; req=urllib.request.Request("https://fill.papermc.io/v3/projects/paper/versions/1.21.8/builds/latest", headers={"User-Agent":"MinecraftBridger-CI/0.1"}); print(json.load(urllib.request.urlopen(req))["downloads"]["server:default"]["url"])')
+          curl -L --fail -H "User-Agent: MinecraftBridger-CI/0.1" \
+            -o Bridger.Android/Assets/spike/paper.jar "$PAPER_URL"
+          [ "$(stat -c%s Bridger.Android/Assets/spike/paper.jar)" -gt 30000000 ]
+          ls -la Bridger.Android/Assets/spike/
+
       - name: APK derle (Release, tüm mimariler)
         run: |
           dotnet publish Bridger.Android/Bridger.Android.csproj -c Release \

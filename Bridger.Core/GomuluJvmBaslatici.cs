@@ -25,7 +25,7 @@ public sealed class GomuluJvmBaslatici : ISunucuBaslatici
         if (_jvm?.Calisiyor == true) return new GomuluIslem(this);
 
         var jvm = new GomuluJvm(JreKok, Path.Combine(klasor, ".bridger-jvm"));
-        jvm.Baslat(xmxMb, jarYolu, new[] { "nogui" });
+        jvm.Baslat(xmxMb, jarYolu, new[] { "--nogui" });
 
         // VM kurulumu 1-5 sn sürer; "hazır" işareti main() ÇAĞRILMADAN hemen
         // önce gelir; dolayısıyla burada bloklamak kabul edilebilir.
