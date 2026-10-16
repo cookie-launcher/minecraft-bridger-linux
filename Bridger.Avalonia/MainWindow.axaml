@@ -247,19 +247,17 @@
           <TextBox x:Name="TxtServerProps" Height="130" AcceptsReturn="True" TextWrapping="Wrap"
                    FontFamily="monospace" FontSize="12"/>
           <TextBlock x:Name="TxtServerimDurum" Foreground="#69F0AE" TextWrapping="Wrap"/>
-          <DockPanel>
-            <StackPanel Orientation="Horizontal" Spacing="8" DockPanel.Dock="Right">
-              <Button Content="Kapat" Classes="ikincil" Click="ModalKapat_Click"/>
-              <Button Content="Durdur" Classes="ikincil" Click="BtnServerDurdur_Click"/>
-              <Button Content="Başlat" Classes="aksiyon" Click="BtnServerBaslat_Click"/>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Content="Yenile" Classes="ikincil" Click="BtnServerListeYenile_Click"/>
-              <Button Content="Klasörü Aç" Classes="ikincil" Click="BtnServerKlasor_Click"/>
-              <Button Content="Kaydet" Classes="ikincil" Click="BtnPropsKaydet_Click"/>
-              <Button Content="Yeni Sunucu Kur" Classes="aksiyon" Click="BtnServerYeniKur_Click"/>
-            </StackPanel>
-          </DockPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Yenile" Classes="ikincil" Click="BtnServerListeYenile_Click"/>
+            <Button Content="Klasörü Aç" Classes="ikincil" Click="BtnServerKlasor_Click"/>
+            <Button Content="Kaydet" Classes="ikincil" Click="BtnPropsKaydet_Click"/>
+            <Button Content="Yeni Sunucu Kur" Classes="aksiyon" Click="BtnServerYeniKur_Click"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="Kapat" Classes="ikincil" Click="ModalKapat_Click"/>
+            <Button Content="Durdur" Classes="ikincil" Click="BtnServerDurdur_Click"/>
+            <Button Content="Başlat" Classes="aksiyon" Click="BtnServerBaslat_Click"/>
+          </StackPanel>
         </StackPanel>
       </Border>
     </Border>
