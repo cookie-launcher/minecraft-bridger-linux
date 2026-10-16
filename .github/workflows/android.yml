@@ -4,11 +4,15 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ['v*']
     paths:
       - 'Bridger.Android/**'
       - 'Bridger.Core/**'
       - 'tools/jre-hazirla.sh'
       - '.github/workflows/android.yml'
+
+permissions:
+  contents: write
 
 jobs:
   apk:
